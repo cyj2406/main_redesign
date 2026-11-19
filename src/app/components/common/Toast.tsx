@@ -15,10 +15,13 @@ import { color, f, motion, shadow } from "@/app/styleTokens";
  */
 
 type ToastTone = "success" | "error";
+interface ToastAction { label: string; onClick: () => void }
 interface ToastState {
   id: number;
   message: string;
   tone: ToastTone;
+  /** 선택 — "되돌리기"처럼 바로 누를 행동(2026-11-19, 코멘트 해결). 있으면 조금 더 오래 보인다 */
+  action?: ToastAction;
 }
 
 let state: ToastState | null = null;
@@ -29,8 +32,8 @@ function emit() {
   listeners.forEach((l) => l());
 }
 
-export function showToast(message: string, tone: ToastTone = "success") {
-  state = { id: ++nextId, message, tone };
+export function showToast(message: string, tone: ToastTone = "success", action?: ToastAction) {
+  state = { id: ++nextId, message, tone, action };
   emit();
 }
 
@@ -53,7 +56,7 @@ export function ToastHost() {
     // 같은 프레임에 마운트+visible=true를 함께 주면 transition이 재생되지 않아 한 프레임 늦춘다.
     setVisibleId(null);
     const raf = requestAnimationFrame(() => setVisibleId(current.id));
-    const dismiss = window.setTimeout(() => setVisibleId(null), AUTO_DISMISS_MS);
+    const dismiss = window.setTimeout(() => setVisibleId(null), current.action ? AUTO_DISMISS_MS * 2 : AUTO_DISMISS_MS);
     return () => { cancelAnimationFrame(raf); window.clearTimeout(dismiss); };
   }, [current]);
 
@@ -75,13 +78,24 @@ export function ToastHost() {
       <div
         role="status"
         aria-live="polite"
-        className="flex items-center gap-2.5 rounded-full bg-white px-4 py-3 pointer-events-auto"
+        // 사라진 뒤(투명)에는 클릭을 받지 않는다 — 보이지 않는 "되돌리기"가 눌리는 일을 막는다
+        className={`flex items-center gap-2.5 rounded-full bg-white px-4 py-3 ${visible ? "pointer-events-auto" : "pointer-events-none"}`}
         style={{ boxShadow: shadow.popover, border: `1px solid ${color.border.default}` }}
       >
         <Icon size={17} strokeWidth={2} color={iconColor} className="shrink-0" />
         <span style={{ ...f, fontWeight: 600, fontSize: 13.5, color: color.text.primary, letterSpacing: "-0.2px" }}>
           {current.message}
         </span>
+        {current.action && (
+          <button
+            type="button"
+            onClick={() => { current.action?.onClick(); setVisibleId(null); }}
+            className="shrink-0 rounded-full px-2.5 h-7 -my-1 -mr-1.5 outline-none hover:bg-black/[0.05] focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
+            style={{ ...f, fontWeight: 700, fontSize: 13, color: color.brand }}
+          >
+            {current.action.label}
+          </button>
+        )}
       </div>
     </div>
   );

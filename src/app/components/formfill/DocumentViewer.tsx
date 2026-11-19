@@ -83,7 +83,7 @@ export default function DocumentViewer({
             key={field.id}
             type="button"
             onClick={() => onSelectField?.(field)}
-            aria-label={`${field.label}${filled ? " — 입력됨" : " — 비어 있음"}`}
+            aria-label={`${field.label}${filled ? ", 입력됨" : ", 비어 있음"}`}
             style={{
               position: "absolute",
               left: `${field.anchor.x * 100}%`,

@@ -60,7 +60,7 @@ export function CancelSubscriptionDialog({
 
           <div className="mx-6 mt-4 px-4 py-3.5 flex flex-col gap-2" style={{ background: color.surface.subtle, borderRadius: 12 }}>
             <p style={{ ...typography.caption, color: color.text.secondary, lineHeight: 1.6 }}>
-              현재 플랜은 <span style={{ fontWeight: 700, color: color.text.primary }}>{subscription.nextBillingDateLabel ?? "—"}</span>까지 이용할 수 있습니다.
+              현재 플랜은 <span style={{ fontWeight: 700, color: color.text.primary }}>{subscription.nextBillingDateLabel ?? "미정"}</span>까지 이용할 수 있습니다.
             </p>
             <p style={{ ...typography.caption, color: color.text.secondary, lineHeight: 1.6 }}>
               해지 신청만으로 이미 지급된 구독 크레딧을 즉시 회수하지 않으며, 정책에 따라 처리됩니다.

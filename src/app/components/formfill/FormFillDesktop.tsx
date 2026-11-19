@@ -412,7 +412,7 @@ function FormFillDesktopBody({
   const canZoomOut = zoom > ZOOM_STEPS[0] + 0.001;
   const canZoomIn = zoom < ZOOM_STEPS[ZOOM_STEPS.length - 1] - 0.001;
 
-  const onDownload = () => window.alert("PDF 다운로드 — 백엔드 연결 예정");
+  const onDownload = () => window.alert("PDF 다운로드는 백엔드 연결 후 지원돼요.");
 
   /* ── 저장 ─────────────────────────────────────────────────────────────
      아이콘만 있는 버튼이라 누른 뒤 아무 변화가 없으면 동작하지 않은 것처럼 보인다.

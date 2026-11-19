@@ -38,7 +38,7 @@ export function SubscriptionCompletePage({
         <div className="flex flex-col gap-2.5 px-4 py-4" style={{ background: color.surface.subtle, borderRadius: 12 }}>
           <Row label="현재 플랜" value={plan.name} />
           <Row label="결제 금액" value={`월 ${plan.priceLabel}`} />
-          <Row label="다음 결제일" value={subscription.nextBillingDateLabel ?? "—"} />
+          <Row label="다음 결제일" value={subscription.nextBillingDateLabel ?? "미정"} />
           <Row label="지급 크레딧" value={plan.monthlyCredits !== null ? `+${plan.monthlyCredits.toLocaleString()}` : "원가 검토 후 확정"} />
         </div>
 

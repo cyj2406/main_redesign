@@ -2,28 +2,15 @@ import { useId, type ReactNode } from "react";
 import { color, editorEntry, f, motion, radius, typography } from "@/app/styleTokens";
 import { Badge } from "@/app/components/common/Badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/app/components/ui/tooltip";
-import { useOnboardingState } from "@/app/components/onboarding/onboardingStore";
-import artImage from "@/assets/home/editor/image.png";
-import artWord from "@/assets/home/editor/word.png";
-import artHangul from "@/assets/home/editor/hangul.png";
-import artPpt from "@/assets/home/editor/ppt.png";
-import artExcel from "@/assets/home/editor/excel.png";
-import artVideo from "@/assets/home/editor/video.png";
-import artLayer from "@/assets/home/editor/layer.png";
+import { EDITOR_APPS } from "@/app/components/editor-shell/apps";
 
 /** 홈 아이콘 줄이 여는 에디터 — App이 워크스페이스 카테고리·결과 형식으로 바꿔 연다. */
-export type EditorKind = "image" | "word" | "hangul" | "ppt" | "excel" | "video" | "layer";
+// "layer"는 홈 줄에서 빠졌지만(2026-11-13) App.openEditor가 레이어 분리 미니 에디터로 여는 길은 남아 있다.
+export type EditorKind = "image" | "word" | "hangul" | "ppt" | "excel" | "pdf" | "uidesign" | "video" | "layer";
 
-/** 순서 = 화면 순서. hint = hover 툴팁 한 줄 — 일곱 개가 한 덩어리로 읽히게 모두 "… 편집"으로 끝낸다(워드·한글·PPT·엑셀은 파일 포맷을 앞에 붙인다). 레이어 분리는 이미지 에디터로 열리지만 입구를 따로 둔다(NEW). */
-const EDITORS: { kind: Exclude<EditorKind, "layer">; label: string; hint: string; art: string }[] = [
-  { kind: "image", label: "이미지", hint: "이미지 편집", art: artImage },
-  { kind: "word", label: "워드", hint: "DOCX 문서 편집", art: artWord },
-  { kind: "hangul", label: "한글", hint: "HWP·HWPX 편집", art: artHangul },
-  { kind: "ppt", label: "PPT", hint: "PPTX 발표자료 편집", art: artPpt },
-  { kind: "excel", label: "엑셀", hint: "XLSX 스프레드시트 편집", art: artExcel },
-  { kind: "video", label: "영상", hint: "영상 편집", art: artVideo },
-];
-const LAYER = { kind: "layer" as const, label: "레이어 분리", hint: "이미지 속 글자·요소 편집", art: artLayer };
+/** 목록·그림·이름은 editor-shell/apps.ts 한 곳(공통 헤더 앱 전환 격자와 같은 목록, 2026-11-19). */
+const EDITORS: { kind: Exclude<EditorKind, "layer">; label: string; hint: string; art: string }[] =
+  EDITOR_APPS.map((a) => ({ kind: a.id, label: a.label, hint: a.hint, art: a.art }));
 
 /**
  * 항목 하나 — 클릭 영역(item × 전체 높이)이 hover 배경 영역과 같고, 모든 항목이 같은 크기다.
@@ -78,21 +65,10 @@ function EntryButton({ label, hint, onClick, children, badge, ariaLabel }: {
   );
 }
 
-/** 그룹 사이 세로 구분선 — 아이콘 칸의 세로 가운데에 맞춘다(항목 위 여백 pad + (icon − 높이) / 2). */
-function GroupDivider() {
-  return (
-    <span
-      aria-hidden
-      className="shrink-0 self-start"
-      style={{ width: 1, height: editorEntry.dividerHeight, marginTop: editorEntry.pad + (editorEntry.icon - editorEntry.dividerHeight) / 2, marginInline: editorEntry.groupGap - editorEntry.space, background: color.border.default }}
-    />
-  );
-}
-
 /**
  * 홈 상단 에디터 진입 줄(2026-10-22 재구성) — 위 검색창(AI로 시작)의 대안 경로.
- *   [──── 무료 편집기 바로 열기 ────]
- *   [이미지 워드 한글 PPT 엑셀 영상] | [레이어 분리]
+ *   [──── 편집기 바로 열기 ────]
+ *   [한글 워드 엑셀 PPT PDF UI 디자인 이미지 영상]  — 2026-11-13 도구모음 대응, 레이어 분리·구분선 제거
  * 각 항목은 해당 포맷의 에디터를 바로 연다(2026-10-29 전체 템플릿 버튼과 첫 구분선 제거).
  * 묶음(.editor-row-inner, w-max)을 홈 공통 컨테이너 안에서 margin-inline:auto 로 가운데 둔다 — 검색창과 같은 중심축.
  * 넘칠 때 justify-center 는 왼쪽이 잘리므로 쓰지 않는다(auto 마진은 0 이 되어 왼쪽 여백부터 가로 스크롤).
@@ -101,16 +77,14 @@ function GroupDivider() {
  * 세로 합계는 이전과 같은 130px(styleTokens editorEntry 주석 참고). 모바일에선 페이지 좌우 여백 밖까지 펼친다.
  */
 /**
- * 아이콘 묶음 폭 — 항목 7개 + 구분선 1개(1px + 양옆 groupGap − space 마진) + 자식 8개 사이 space 7칸.
+ * 아이콘 묶음 폭 — 항목 8개 + 사이 space 7칸.
  * 라벨 줄의 최대 폭으로 쓴다: 넓은 화면에선 라벨 양옆 선이 묶음 폭과 같고, 묶음이 넘치는 좁은 화면에선
  * 보이는 컨테이너 폭에 맞춰 가운데에 남는다(라벨 줄은 가로 스크롤 영역 밖에 있다).
  */
-const BUNDLE_WIDTH = 7 * editorEntry.item + 7 * editorEntry.space + (1 + 2 * (editorEntry.groupGap - editorEntry.space));
+const BUNDLE_WIDTH = EDITORS.length * editorEntry.item + (EDITORS.length - 1) * editorEntry.space;
 
 export function EditorQuickLinks({ onOpenEditor }: { onOpenEditor: (kind: EditorKind) => void }) {
   const rule = <span aria-hidden className="flex-1 h-px" style={{ background: color.border.default }} />;
-  // 홈 온보딩 2단계('열고 고치는 건 무료예요')가 떠 있는 동안만 라벨의 '무료'를 브랜드 배지로 — 끝나면 원래 글자로 돌아간다
-  const freeEmphasis = useOnboardingState().stepId === "editor-row";
   return (
     <nav
       data-tutorial="categories"
@@ -136,7 +110,7 @@ export function EditorQuickLinks({ onOpenEditor }: { onOpenEditor: (kind: Editor
             className="whitespace-nowrap"
             style={{ ...typography.caption, color: color.text.secondary, lineHeight: `${editorEntry.captionLineHeight}px` }}
           >
-            {freeEmphasis ? <><Badge tone="brandSolid" size="sm">무료</Badge> 편집기 바로 열기</> : "무료 편집기 바로 열기"}
+            편집기 바로 열기
           </p>
           {rule}
       </div>
@@ -147,10 +121,6 @@ export function EditorQuickLinks({ onOpenEditor }: { onOpenEditor: (kind: Editor
               <img src={e.art} alt="" draggable={false} className="block" style={{ width: editorEntry.icon, height: editorEntry.icon, objectFit: "contain" }} />
             </EntryButton>
           ))}
-          <GroupDivider />
-          <EntryButton label={LAYER.label} hint={LAYER.hint} badge="NEW" ariaLabel={`${LAYER.label} 편집기 열기 (새 기능)`} onClick={() => onOpenEditor(LAYER.kind)}>
-            <img src={LAYER.art} alt="" draggable={false} className="block" style={{ width: editorEntry.icon, height: editorEntry.icon, objectFit: "contain" }} />
-          </EntryButton>
         </div>
       </div>
     </nav>

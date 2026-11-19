@@ -3065,7 +3065,7 @@ export default function TabletMiniEditor({
               >
                 <Loader2 size={14} strokeWidth={2.4} color={C.primary} className="animate-spin" />
                 <span className="tabular-nums" style={{ fontSize: 12.5, fontWeight: 600, color: C.text }}>
-                  텍스트 분리 중 — {textSplit.runProgress.doneCount}/{textSplit.runProgress.total}장
+                  텍스트 분리 중 {textSplit.runProgress.doneCount}/{textSplit.runProgress.total}장
                 </span>
               </div>
             )}
@@ -3087,7 +3087,7 @@ export default function TabletMiniEditor({
               >
                 <Loader2 size={14} strokeWidth={2.4} color={C.primary} className="animate-spin" />
                 <span className="tabular-nums" style={{ fontSize: 12.5, fontWeight: 600, color: C.text }}>
-                  전체 변환 중 — {pageConvert.runProgress.doneCount}/{pageConvert.runProgress.total}장
+                  전체 변환 중 {pageConvert.runProgress.doneCount}/{pageConvert.runProgress.total}장
                 </span>
               </div>
             )}

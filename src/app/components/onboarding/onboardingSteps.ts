@@ -44,10 +44,9 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: "editor-row",
     target: sel("editor-row"),
-    // 이 단계 동안만 섹션 라벨의 '무료'가 브랜드 배지로 강조된다(EditorQuickLinks — onboardingStore.stepId)
-    // 편집기 안의 AI 기능은 유료 — '전부 무료'가 아니라 무료 범위를 '열고 고치는 것'으로 한정한다
-    title: "열고 고치는 건 무료예요",
-    body: "워드·한글·PPT·엑셀을 설치 없이 웹에서 바로 편집하세요.",
+    // 2026-11-13 라벨에서 '무료'를 빼면서(→ '편집기 바로 열기') 배지 강조와 무료 문구도 뺐다
+    title: "편집기를 바로 써 보세요",
+    body: "한글·워드·PPT·PDF부터 디자인·영상까지, 설치 없이 웹에서 열어 편집해요.",
     scroll: "center",
     placement: "bottom",
   },
@@ -55,8 +54,9 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     // 마지막 단계 — 끝나면 오버레이만 사라지고 이 섹션이 눈앞에 펼쳐진 채 남는다(끝나는 자리 = 고를 수 있는 자리)
     id: "task-grid",
     target: sel("task-grid-title"),
-    title: "뭘 쓸지 애매하면 여기서 고르세요",
-    body: "카드뉴스·보고서·발표자료처럼 만들 작업을 고르면, 맞는 템플릿만 보여드려요.",
+    // 1단계는 '적는 길', 이 단계는 '고르는 길' — 섹션 부제를 되풀이하지 않는다
+    title: "골라서 시작해도 돼요",
+    body: "만들 종류를 누르면 바로 쓸 수 있는 템플릿이 쭉 나와요.",
     scroll: "top",
     placement: "bottom",
     // 섹션이 화면보다 길다 — 제목부터 화면 아래 끝까지 밝히고, 아래쪽은 잘린 선 대신 서서히 흐려지게

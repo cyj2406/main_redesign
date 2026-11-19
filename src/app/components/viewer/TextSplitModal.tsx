@@ -1144,7 +1144,7 @@ function SummaryView({
                 const img = byId.get(id);
                 return (
                   <li key={id} style={{ fontSize: 12, color: C.text }}>
-                    · {img ? `슬라이드 ${img.slide} - ${img.label}` : id}
+                    · {img ? `슬라이드 ${img.slide} · ${img.label}` : id}
                   </li>
                 );
               })}

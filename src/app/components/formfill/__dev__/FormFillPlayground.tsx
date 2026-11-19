@@ -103,7 +103,7 @@ function PlaygroundBody() {
         <LanguageSelect input={inLang} output={outLang} onChangeInput={setInLang} onChangeOutput={setOutLang} />
       </Block>
 
-      <Block label="DocumentViewer — 칸을 누르면 그 질문으로 이동합니다">
+      <Block label="DocumentViewer: 칸을 누르면 그 질문으로 이동합니다">
         <DocumentViewer
           title={F4_FORM.title}
           fields={ff.fields}
@@ -113,7 +113,7 @@ function PlaygroundBody() {
         />
       </Block>
 
-      <Block label="타입 점프 — 5종 카드를 모두 눌러볼 수 있습니다">
+      <Block label="타입 점프: 5종 카드를 모두 눌러볼 수 있습니다">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {typeJumps.map(({ type, idx }) => (
             <button
@@ -165,12 +165,12 @@ function PlaygroundBody() {
             formTitle={F4_FORM.title}
             filled={ff.progress.filled}
             onReview={ff.review}
-            onDownload={() => window.alert("PDF 다운로드 — 2단계에서 연결")}
+            onDownload={() => window.alert("PDF 다운로드는 2단계에서 연결")}
           />
         </Block>
       ) : (
         <>
-          <Block label={`QuestionCard — type: ${ff.field?.type ?? "-"}`}>
+          <Block label={`QuestionCard (type: ${ff.field?.type ?? "없음"})`}>
             {ff.field && (
               <QuestionCard
                 field={ff.field}

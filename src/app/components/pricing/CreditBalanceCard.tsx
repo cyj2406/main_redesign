@@ -2,7 +2,7 @@ import { Button } from "@/app/components/common/Button";
 import { color, f, radius, shadow, typography } from "@/app/styleTokens";
 import type { SubscriptionSnapshot } from "@/app/state/subscription";
 
-const EMPTY = "—";
+const EMPTY = "미정";
 
 function StatBlock({ label, value }: { label: string; value: string }) {
   return (
@@ -27,7 +27,7 @@ function StatBlock({ label, value }: { label: string; value: string }) {
  * 스토어가 그 구분을 실제로 시작한 적이 있을 때만(topupCreditsRemaining !== null)
  * 보여준다 — 근거 없이 0으로 나누지 않는다. "구독 크레딧 만료일"은 서버가 내려주는
  * 값(예: expiresAt)이 있어야 정확히 표시할 수 있는데 지금 스토어에는 그 필드가
- * 없다 — 다음 결제일로 임의 대체하지 않고 정직하게 "—"(미정)로 남겨 둔다.
+ * 없다 — 다음 결제일로 임의 대체하지 않고 정직하게 "미정"으로 남겨 둔다.
  */
 export function CreditBalanceCard({
   liveBalance,

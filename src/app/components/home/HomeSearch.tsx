@@ -5,8 +5,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/app/components/ui/too
 import RequestHelperHint from "@/app/components/onboarding/RequestHelperHint";
 import { useOnboardingState } from "@/app/components/onboarding/onboardingStore";
 
-const PLACEHOLDER_DESKTOP = "무엇을 만들까요? 예: 행사 안내문, 카페 홍보 이미지";
-const PLACEHOLDER_MOBILE = "무엇을 만들까요?";
+const PLACEHOLDER_DESKTOP = "어떤 작업이 필요한가요? 예: 행사 안내문, 카페 홍보 이미지";
+const PLACEHOLDER_MOBILE = "어떤 작업이 필요한가요?";
 
 /** HomeSearch 안에서만 쓰는 최소 미디어쿼리 훅 — App.tsx의 useIsTabletUp과 같은 768px
  *  기준이지만, 훅 하나 재사용하려고 App.tsx 내부 함수를 export하지 않고 여기서 짧게 둔다. */
@@ -100,7 +100,7 @@ export default function HomeSearch({
     <section aria-label="시작하기" className="w-full mx-auto flex flex-col items-center" style={{ maxWidth: 760, gap: 20 }}>
       <div className="w-full flex flex-col items-center sm:flex-row sm:justify-center" style={{ gap: 12 }}>
         <span style={{ ...f, fontWeight: 400, fontSize: 14, lineHeight: "20px", color: color.text.secondary }}>
-          뭘 써야 할지 모르겠다면
+          무엇부터 쓸지 막막하다면
         </span>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -139,7 +139,7 @@ export default function HomeSearch({
               }}
             >
               <Sparkles size={16} aria-hidden className="shrink-0" />
-              <span>요청 도우미</span>
+              <span>요청 작성 도우미</span>
               <ArrowRight
                 size={16}
                 aria-hidden
@@ -208,7 +208,7 @@ export default function HomeSearch({
             color: "#fff",
           }}
         >
-          시작하기
+          검색
         </button>
       </div>
       <RequestHelperHint inputRef={inputRef} query={query} onHelp={onHelp} />

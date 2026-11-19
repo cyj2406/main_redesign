@@ -151,7 +151,6 @@ export const taskGroupTitleStyle = { ...f, fontWeight: 600, letterSpacing: "-0.3
  *   item        : 항목(=클릭 영역·hover 배경) 폭. 아이콘 좌우 안쪽 여백 (item − icon) / 2 = pad 와 같다.
  *   pad         : 항목 안쪽 여백(상하좌우 동일) — hover 배경이 아이콘·이름을 고르게 감싼다.
  *   space       : 아이콘 ↔ 이름, 항목 ↔ 항목 간격(같은 값 하나).
- *   groupGap    : 그룹 ↔ 구분선 간격(구분선 양옆). space 보다 넓다.
  *   captionGap  : "무료 편집기 바로 열기" 라벨 ↔ 아이콘 줄 — space 보다 넓다.
  *   모서리는 radius.card(hover 배경 16)를 그대로 쓴다.
  *   badgeTop/badgeRight: NEW 배지를 아이콘 칸 우상단 기준으로 고정하는 거리.
@@ -161,14 +160,12 @@ export const editorEntry = {
   item: 76,
   pad: 6,
   space: 8,
-  groupGap: 16,
   captionGap: 10,
   /** 이름 글자 — 500·본문 회색, 크기는 좁은 칸에 맞춰 14px 고정 */
   labelSize: 14,
   labelLineHeight: 20,
   /** 설명 라벨 — typography.caption(12px·500) 크기에 color.text.secondary */
   captionLineHeight: 16,
-  dividerHeight: 48,
   badgeTop: -6,
   badgeRight: -12,
   /** 검색창 ↔ 아이콘 줄 — 부모 세로 간격(24px, App HomeScreen)에 더하는 값. 합 48px */
@@ -232,4 +229,48 @@ export const pageContainerWidth = 1120;
 export const motion = {
   fast: "160ms cubic-bezier(0.4, 0, 0.2, 1)",
   normal: "200ms cubic-bezier(0.4, 0, 0.2, 1)",
+} as const;
+
+/**
+ * 편집기 글자 크기(2026-11-19, docs/design-system.md "편집기 패널 글자") — 편집기 옆 패널·상단 바·UI 디자인 도구 영역.
+ * 미리캔버스 편집 화면 실측(읽는 글자 14 · 보조 12, 그보다 작은 글자 없음)에 맞춘 **14 / 12 두 단계**. 코드에 숫자를 직접 적지 말고 이 값을 쓴다.
+ * 규칙: 12px보다 작게 쓰지 않는다. 위계는 크기 대신 굵기(400·600·700)와 색으로.
+ * 예외: 16px 원 안의 숫자 배지(9.5px), 문서 목업 안 내용.
+ */
+export const editorType = {
+  /** 숫자·시간·단축키·용량 (2026-11-19 미리캔버스처럼 12로, 이름은 쓰임새 구분용) */
+  meta: 12,
+  /** 보조 설명·태그·아이콘 아래 이름·UI 디자인 도구 영역 기본 */
+  caption: 12,
+  /** 칸 라벨(600으로 구분)·작은 버튼 */
+  label: 14,
+  /** 패널 본문·목록 줄·헤더 버튼 */
+  body: 14,
+  /** 패널 제목(700)·입력칸 */
+  large: 14,
+  /** AI 대화 글(내 말풍선·AI 결과 설명)과 AI 입력창 — Claude·ChatGPT 대화처럼 16px/행간 24px(2026-11-19). 대화만, 패널의 다른 글자는 14 / 12 */
+  chat: 16,
+} as const;
+
+/**
+ * 편집기 간격(2026-11-19, docs/design-system.md "편집기 간격") — 미리캔버스 편집 화면 실측 기준, **4px 격자**.
+ * 패널 좌우 16 · 패널 머리 48 · 입력칸·주요 버튼 40 · 작은 버튼·칩·아이콘 버튼 32.
+ * 묶음 안 8 · 묶음 사이 16 · 구역 사이 24. 2px은 아이콘 위치 맞춤 같은 미세 조정에만.
+ * Tailwind 클래스로는 1=4px · 2=8 · 3=12 · 4=16 · 6=24 (x.5 단계는 쓰지 않는다, 0.5만 미세 조정).
+ */
+export const editorSpace = {
+  micro: 2,
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  /** 패널 안쪽 좌우 */
+  panelX: 16,
+  /** 패널 머리 높이 */
+  panelHeader: 48,
+  /** 입력칸·주요 버튼 */
+  control: 40,
+  /** 작은 버튼·칩·아이콘 버튼 */
+  compact: 32,
 } as const;

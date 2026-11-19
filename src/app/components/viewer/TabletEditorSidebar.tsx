@@ -560,7 +560,7 @@ function ThemePanel() {
       <div className="flex flex-col gap-2">
         <p style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>제목·섹션 바</p>
         <p style={{ fontSize: 12, color: C.sub, lineHeight: 1.6 }}>
-          제목·섹션 바(가./1./A.)의 디자인을 전 슬라이드에 통일 — 문구는 유지돼요.
+          제목·섹션 바(가./1./A.)의 디자인을 전 슬라이드에 통일해요. 문구는 유지돼요.
         </p>
         <button
           className="w-full h-11 rounded-[10px] flex items-center justify-center gap-2"

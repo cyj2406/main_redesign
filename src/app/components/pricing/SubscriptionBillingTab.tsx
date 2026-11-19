@@ -258,9 +258,9 @@ export function SubscriptionBillingTab({ onChangePlan }: { onChangePlan: () => v
                   큰 그리드로 나누지 않아 빈 공간과 구분선이 줄었다. */}
               <p style={{ ...typography.caption, lineHeight: 1.6 }}>
                 {subscription.status === "active" ? (
-                  <>다음 결제일 <strong style={{ color: color.text.primary, fontWeight: 700 }}>{subscription.nextBillingDateLabel ?? "—"}</strong> · 예정 금액 <strong style={{ color: color.text.primary, fontWeight: 700 }}>{wonFormat(plan.priceLabel)}</strong></>
+                  <>다음 결제일 <strong style={{ color: color.text.primary, fontWeight: 700 }}>{subscription.nextBillingDateLabel ?? "미정"}</strong> · 예정 금액 <strong style={{ color: color.text.primary, fontWeight: 700 }}>{wonFormat(plan.priceLabel)}</strong></>
                 ) : (
-                  <>이용 종료일 <strong style={{ color: color.text.primary, fontWeight: 700 }}>{subscription.endDateLabel ?? "—"}</strong></>
+                  <>이용 종료일 <strong style={{ color: color.text.primary, fontWeight: 700 }}>{subscription.endDateLabel ?? "미정"}</strong></>
                 )}
               </p>
               {/* 이번 달 크레딧 — 게이지 바는 없애고(2026-10-02) 남은/제공 크레딧 숫자만 한 줄로 둔다. */}
@@ -451,9 +451,9 @@ export function SubscriptionBillingTab({ onChangePlan }: { onChangePlan: () => v
                       으로 옮겼다 — 문구를 지운 게 아니라 옮긴 것이다(아래 accordion 본문 참고). */}
                   <p style={{ ...f, fontWeight: 400, fontSize: 12.5, color: color.text.secondary, lineHeight: 1.6 }}>
                     {subscription.status === "cancel_scheduled" ? (
-                      <>{subscription.endDateLabel ?? "—"}까지 이용할 수 있으며, 다음 자동 결제는 진행되지 않습니다.</>
+                      <>{subscription.endDateLabel ?? "미정"}까지 이용할 수 있으며, 다음 자동 결제는 진행되지 않습니다.</>
                     ) : (
-                      <>구독을 해지하면 다음 결제일({subscription.nextBillingDateLabel ?? "—"})부터 자동 결제가 진행되지 않습니다. 현재 이용 기간까지는 계속 서비스를 이용할 수 있습니다.</>
+                      <>구독을 해지하면 다음 결제일({subscription.nextBillingDateLabel ?? "미정"})부터 자동 결제가 진행되지 않습니다. 현재 이용 기간까지는 계속 서비스를 이용할 수 있습니다.</>
                     )}
                   </p>
                 </div>
@@ -519,7 +519,7 @@ function DevOutcomeSelect<K extends keyof DevForcedOutcomes>({
 function DevPanel({ subscription }: { subscription: SubscriptionSnapshot }) {
   return (
     <div className="rounded-[12px] px-3.5 py-3 flex flex-col gap-2.5" style={{ background: "#fffbeb", border: "1px solid #fde68a" }}>
-      <span style={{ ...f, fontWeight: 700, fontSize: 11.5, color: "#92400e" }}>[개발용] 상태 전환 — ?devpanel=1 일 때만 보임</span>
+      <span style={{ ...f, fontWeight: 700, fontSize: 11.5, color: "#92400e" }}>[개발용] 상태 전환 (?devpanel=1 일 때만 보임)</span>
       <div className="flex flex-wrap gap-1.5">
         <DevButton label="정기결제 실패 시뮬레이션" onClick={simulatePaymentFailureForDev} />
         <DevButton label="이용 기간 즉시 만료(해지 예정 → 종료)" onClick={expireSubscriptionForDev} disabled={subscription.status !== "cancel_scheduled"} />
