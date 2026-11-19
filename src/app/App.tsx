@@ -31,7 +31,6 @@ import ClampedText from "@/app/components/common/ClampedText";
 import { COMPOSER_PLACEHOLDER } from "@/app/copy";
 import { color, controlHeight, f, motion, radius, shadow, SUBTITLE_COLOR, typography } from "@/app/styleTokens";
 import FormFillDesktop from "@/app/components/formfill/FormFillDesktop";
-import TaskGrid from "@/app/components/home/TaskGrid";
 import RecommendedCarousel from "@/app/components/home/RecommendedCarousel";
 import HomeSearch from "@/app/components/home/HomeSearch";
 import { EditorQuickLinks, type EditorKind } from "@/app/components/home/EditorQuickLinks";
@@ -2050,7 +2049,7 @@ function HomeScreen({ onSelectTask, onOpenCardNews, onOpenEditor, onSearch, onHe
             <EditorQuickLinks onOpenEditor={onOpenEditor} />
           </div>
           <RecommendedCarousel onSelectTemplate={onSelectTask} onViewAll={onViewAllTemplates} />
-          <TaskGrid onSelectTask={(taskId) => (taskId === "cardnews" ? onOpenCardNews() : onSelectTask(taskId))} />
+          {/* "작업별로 시작하기"(TaskGrid)는 2026-11-19 요청으로 홈에서 뺐다. 컴포넌트 파일은 남겨 둠 */}
         </div>
       </div>
       {isTabletRange && <Footer />}

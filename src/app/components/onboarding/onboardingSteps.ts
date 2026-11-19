@@ -24,7 +24,8 @@ export interface OnboardingStepView {
 }
 
 export interface OnboardingStep extends OnboardingStepView {
-  id: "search" | "editor-row" | "task-grid";
+  id: "search" | "editor-row";
+  // "task-grid" 단계는 2026-11-19 홈에서 "작업별로 시작하기"를 빼며 함께 뺐다(2단계로)
   mobile?: Partial<OnboardingStepView>;
 }
 
@@ -49,18 +50,6 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     body: "한글·워드·PPT·PDF부터 디자인·영상까지, 설치 없이 웹에서 열어 편집해요.",
     scroll: "center",
     placement: "bottom",
-  },
-  {
-    // 마지막 단계 — 끝나면 오버레이만 사라지고 이 섹션이 눈앞에 펼쳐진 채 남는다(끝나는 자리 = 고를 수 있는 자리)
-    id: "task-grid",
-    target: sel("task-grid-title"),
-    // 1단계는 '적는 길', 이 단계는 '고르는 길' — 섹션 부제를 되풀이하지 않는다
-    title: "골라서 시작해도 돼요",
-    body: "만들 종류를 누르면 바로 쓸 수 있는 템플릿이 쭉 나와요.",
-    scroll: "top",
-    placement: "bottom",
-    // 섹션이 화면보다 길다 — 제목부터 화면 아래 끝까지 밝히고, 아래쪽은 잘린 선 대신 서서히 흐려지게
-    extendToViewportBottom: true,
   },
 ];
 
