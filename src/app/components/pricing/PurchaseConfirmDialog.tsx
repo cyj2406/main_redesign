@@ -154,7 +154,7 @@ export function PurchaseConfirmDialog({
       setSelectedMethod(newMethod);
       return newMethod;
     }
-    if (result.status === "failure") setRegisterError("카드를 등록하지 못했습니다. 다시 시도해주세요.");
+    if (result.status === "failure") setRegisterError("카드를 등록하지 못했어요. 다시 시도해 주세요.");
     return null;
   };
 
@@ -202,7 +202,7 @@ export function PurchaseConfirmDialog({
                 <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: color.text.muted, padding: "12px 0" }}>결제 수단을 불러오는 중입니다…</p>
               ) : methodsState === "error" ? (
                 <div className="flex items-center justify-between gap-3 py-2">
-                  <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: "#ef4444" }}>결제 수단을 불러오지 못했습니다.</p>
+                  <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: "#ef4444" }}>결제 수단을 불러오지 못했어요.</p>
                   <Button
                     variant="secondary"
                     size="md"
@@ -215,7 +215,7 @@ export function PurchaseConfirmDialog({
                   </Button>
                 </div>
               ) : methods.length === 0 ? (
-                <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: color.text.secondary, padding: "12px 0" }}>등록된 결제 수단이 없습니다.</p>
+                <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: color.text.secondary, padding: "12px 0" }}>등록된 결제 수단이 없어요.</p>
               ) : (
                 <div role="radiogroup" aria-label="결제 수단 목록" className="flex flex-col gap-2">
                   {methods.map((m) => (
@@ -324,7 +324,7 @@ export function PurchaseConfirmDialog({
                       </span>
                     </div>
                   ) : (
-                    <span style={{ ...f, fontWeight: 400, fontSize: 13, color: color.text.secondary }}>등록된 결제 수단이 없습니다.</span>
+                    <span style={{ ...f, fontWeight: 400, fontSize: 13, color: color.text.secondary }}>등록된 결제 수단이 없어요.</span>
                   )}
                   <Button
                     ref={changeBtnRef}
@@ -345,8 +345,8 @@ export function PurchaseConfirmDialog({
 
                 <p style={PG_NOTICE_STYLE}>
                   {isSubscription
-                    ? `카드 등록·결제 승인은 토스페이먼츠를 통해 처리됩니다. ${isPlanChange ? "결제가 완료되면 변경한 요금제가 적용됩니다." : "결제 승인이 확인된 뒤에만 구독이 시작됩니다."}`
-                    : `일회성 결제이며 구독과 별도로 청구됩니다. 결제 승인은 토스페이먼츠를 통해 처리됩니다.`}
+                    ? `카드 등록·결제 승인은 토스페이먼츠를 통해 처리됩니다. ${isPlanChange ? "결제가 끝나면 바꾼 요금제가 적용돼요." : "결제 승인이 확인된 뒤에 구독이 시작돼요."}`
+                    : `한 번만 결제되고 구독과 따로 청구돼요. 결제 승인은 토스페이먼츠에서 처리해요.`}
                 </p>
               </div>
 
@@ -389,7 +389,7 @@ export function PurchaseConfirmDialog({
 
             {/* 카드 미등록 — 결제 버튼은 막지 않고(누르면 등록 흐름 → 결제), 버튼 바로 위에서 그 순서를 알린다. */}
             {!hasPaymentMethod && (
-              <p className="px-6 mt-5 -mb-2" style={PG_NOTICE_STYLE}>카드 등록 후 결제가 진행됩니다.</p>
+              <p className="px-6 mt-5 -mb-2" style={PG_NOTICE_STYLE}>카드를 등록하면 결제가 진행돼요.</p>
             )}
 
             {/* "닫기"는 짧은 고정 폭, CTA가 나머지 공간을 다 쓰게 해서 문구가 줄바꿈되지 않게 한다.

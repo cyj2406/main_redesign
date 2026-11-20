@@ -18,7 +18,7 @@ export function ProfileAvatar({ profile, size, ring = false }: { profile: Pick<P
       }}
     >
       {profile.avatarUrl ? (
-        <img alt="" className="size-full object-cover" src={profile.avatarUrl} />
+        <img alt="" className="size-full object-cover" src={profile.avatarUrl} draggable={false} />
       ) : (
         <span aria-hidden style={{ ...f, fontWeight: 700, fontSize: Math.round(size * 0.36), color: "#ffffff", letterSpacing: "-0.3px" }}>
           {profileInitials(profile.name)}

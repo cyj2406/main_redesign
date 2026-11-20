@@ -80,7 +80,7 @@ export function useShareToast() {
     } catch {
       /* 클립보드를 못 쓰는 환경 — 목업이므로 안내만 띄운다 */
     }
-    setMessage("공유 링크가 복사되었습니다");
+    setMessage("공유 링크를 복사했어요.");
   }, []);
 
   return { message, share };

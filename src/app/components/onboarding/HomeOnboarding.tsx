@@ -30,11 +30,11 @@ const DIM = "rgba(15, 23, 42, 0.58)";
 
 const sel = (name: string) => `[data-onboarding="${name}"]`;
 
-function prefersReducedMotion() {
+export function prefersReducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-function measure(target: string | string[]): DOMRect | null {
+export function measure(target: string | string[]): DOMRect | null {
   const rects = (Array.isArray(target) ? target : [target])
     .map((s) => document.querySelector(s)?.getBoundingClientRect())
     .filter((r): r is DOMRect => !!r && (r.width > 0 || r.height > 0));
@@ -73,7 +73,7 @@ function scrollToStep(view: OnboardingStepView) {
 }
 
 /** 말풍선 위치 — 선호 방향부터 자리가 나는 쪽을 고르고, 어디에도 안 들어가면 화면 아래에 띄운다(대상 일부를 덮는다). */
-function placeTooltip(r: DOMRect, w: number, h: number, pref: Placement) {
+export function placeTooltip(r: DOMRect, w: number, h: number, pref: Placement) {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const clampX = (x: number) => Math.min(Math.max(x, MARGIN), vw - w - MARGIN);

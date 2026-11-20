@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Copy, FolderOpen, Home, LayoutGrid, LayoutList, Link2, MessageCircle, MoreHorizontal, Pencil, Plus, Search, StickyNote, Trash2, X } from "lucide-react";
 
 import { showToast } from "@/app/components/common/Toast";
-import { relTime } from "@/app/components/editor-shell/comments";
+import { COMMENT_SHORTCUT, relTime } from "@/app/components/editor-shell/comments";
 import { color, f, editorType } from "@/app/styleTokens";
 import artUiDesign from "@/assets/home/editor/ui-design.png";
 
@@ -10,6 +10,7 @@ import { NodeView } from "./Canvas";
 import { EDITOR_ACCENT, TEMPLATES, docFromSteps, type Doc } from "./model";
 import type { DFile } from "./UiDesignEditor";
 import { IconTooltip } from "@/app/components/viewer/IconTooltip";
+import { josa } from "@/app/copy";
 
 /**
  * 딸깍 UI 디자인 홈 탭 v3 — "내가 한 작업"이 먼저 보이게(docs/ui-design-editor.md "1-2. 홈 v3").
@@ -20,15 +21,15 @@ import { IconTooltip } from "@/app/components/viewer/IconTooltip";
 
 const GUIDE_KEY = "ddalkkak.uidesign.guideDismissed";
 const GUIDE = [
-  ["프레임 그리기", "F", "프레임 도구를 고른 뒤 캔버스에서 드래그하거나 기기 크기를 고르세요."],
+  ["화면 만들기", "F", "아래 도구 모음에서 화면을 고른 뒤 캔버스를 누르거나 끌어서 만들어요."],
   ["딸깍 AI에게 시키기", "", "오른쪽 딸깍 AI에 원하는 화면을 말로 적으면 캔버스에 바로 그려요."],
-  ["코멘트 남기기", "C", "캔버스를 클릭해 의견을 남기고, 핀을 끌어 옮길 수 있어요."],
+  ["코멘트 남기기", COMMENT_SHORTCUT, "위쪽 💬를 누르고 캔버스를 클릭해 의견을 남겨요. 핀은 끌어서 옮길 수 있어요."],
 ] as const;
 const NEUTRAL_ICON = { background: "#f1f5f9", color: "#334155" } as const;
 /** 내 파일·템플릿 격자가 같은 열 너비를 쓴다 — 위아래 카드 정렬선이 하나로 떨어지게 */
 const GRID_COLS = "repeat(auto-fill, minmax(220px, 1fr))";
 
-export function UiDesignHome({ files, unreadByFile, onOpenFile, onRename, onDuplicate, onDelete, onNewFile, onOpenImage, onTemplate }: {
+export function UiDesignHome({ files, unreadByFile, onOpenFile, onRename, onDuplicate, onDelete, onNewFile, onNewBoard, onOpenImage, onTemplate }: {
   files: DFile[];
   unreadByFile: Record<string, number>;
   onOpenFile: (id: string) => void;
@@ -36,6 +37,8 @@ export function UiDesignHome({ files, unreadByFile, onOpenFile, onRename, onDupl
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
   onNewFile: () => void;
+  /** 새 보드(피그잼형, 2026-11-20) */
+  onNewBoard: () => void;
   onOpenImage: (name: string, dataUrl: string, w: number, h: number) => void;
   onTemplate: (id: string) => void;
 }) {
@@ -75,13 +78,10 @@ export function UiDesignHome({ files, unreadByFile, onOpenFile, onRename, onDupl
   return (
     <div className="flex-1 min-w-0 min-h-0 flex bg-white" style={f}>
       <aside className="w-[200px] shrink-0 flex flex-col gap-0.5 px-3 py-4" style={{ borderRight: "1px solid #eef0f3" }} aria-label="UI 디자인 홈 메뉴">
-        <div className="flex items-center gap-2 px-2 pb-4">
-          <img src={artUiDesign} alt="" className="size-6 object-contain" />
-          <span style={{ fontSize: editorType.large, fontWeight: 700, color: "#111827" }}>딸깍 UI 디자인</span>
-        </div>
-        <label className="flex items-center gap-2 rounded-lg px-3 h-8 mb-3 border border-transparent focus-within:border-[#cbd5e1]" style={{ background: "#f3f4f6" }}>
+        {/* 앱 이름·아이콘 줄은 뺐다(2026-11-20): 위 공통 상단 바 "딸깍 UI 디자인 ▾"와 겹쳤다. Figma 홈처럼 검색부터 */}
+        <label className="field-pill flex items-center gap-2 rounded-lg px-3 h-8 mb-3 border border-transparent" style={{ background: "#f3f4f6" }}>
           <Search size={13} color="#9ca3af" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="파일 및 템플릿 검색" className="flex-1 min-w-0 bg-transparent outline-none" style={{ fontSize: editorType.label }} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="파일 및 템플릿 검색" className="field-inline flex-1 min-w-0 bg-transparent outline-none" style={{ fontSize: editorType.label }} />
         </label>
         {([["recent", "최근 항목", Home, files.length], ["templates", "템플릿", LayoutGrid, TEMPLATES.length]] as const).map(([k, l, Icon, n]) => (
           <button key={k} type="button" aria-current={nav === k ? "page" : undefined} onClick={() => setNav(k)} className="flex items-center gap-2 rounded-lg px-3 h-10 text-left hover:bg-[#f8fafc]" style={{ background: nav === k ? "#f1f5f9" : undefined, fontSize: editorType.body, fontWeight: nav === k ? 700 : 500, color: "#111827" }}>
@@ -108,7 +108,7 @@ export function UiDesignHome({ files, unreadByFile, onOpenFile, onRename, onDupl
                 <button type="button" onClick={onNewFile} className="flex items-center gap-2 rounded-xl px-4 h-12 outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#4f7bff]" style={{ background: EDITOR_ACCENT, color: "#fff" }}>
                   <Plus size={16} strokeWidth={2.4} /><span style={{ fontSize: editorType.large, fontWeight: 700 }}>새 디자인 파일</span>
                 </button>
-                <button type="button" className={action} style={{ border: "1px solid #e5e7eb" }} onClick={() => showToast("보드(화이트보드)는 준비 중이에요.")}>
+                <button type="button" className={action} style={{ border: "1px solid #e5e7eb" }} onClick={onNewBoard}>
                   <span className="size-8 rounded-lg flex items-center justify-center" style={NEUTRAL_ICON}><StickyNote size={14} /></span>
                   <span style={{ fontSize: editorType.body, fontWeight: 600, color: "#111827" }}>새 보드</span>
                 </button>
@@ -238,7 +238,7 @@ function FileMenu({ name, onOpen, onRename, onDuplicate, onDelete, onClose }: { 
     <div ref={ref} className="absolute right-2 top-9 z-20 bg-white rounded-xl py-1 w-[200px]" style={{ ...f, boxShadow: "0px 8px 32px rgba(0,0,0,0.14)", border: "1px solid #e5e7eb" }} role="menu" onClick={(e) => e.stopPropagation()}>
       {confirm ? (
         <div style={{ padding: "8px 12px" }}>
-          <p style={{ fontSize: editorType.label, color: "#111827", fontWeight: 600, wordBreak: "keep-all" }}>“{name}”을(를) 삭제할까요?</p>
+          <p style={{ fontSize: editorType.label, color: "#111827", fontWeight: 600, wordBreak: "keep-all" }}>{josa(`“${name}”`, "을/를")} 삭제할까요?</p>
           <p style={{ fontSize: editorType.caption, color: "#64748b", marginTop: 2 }}>코멘트도 함께 지워지고 되돌릴 수 없어요.</p>
           <div className="flex gap-2 mt-3">
             <button type="button" onClick={onDelete} className="rounded-md px-3 h-8" style={{ fontSize: editorType.caption, fontWeight: 700, color: "#fff", background: "#ef4444" }}>삭제</button>
@@ -275,7 +275,7 @@ function Meta({ file, unread }: { file: DFile; unread: number }) {
   const n = frameCount(file.doc);
   return (
     <span className="flex items-center gap-2 flex-wrap" style={{ fontSize: editorType.caption, color: "#64748b" }}>
-      {relTime(file.updatedAt)} 수정 · 프레임 {n}개
+      {file.kind === "board" ? <>{relTime(file.updatedAt)} 수정 · 보드</> : <>{relTime(file.updatedAt)} 수정 · 프레임 {n}개</>}
       {unread > 0 && <span className="inline-flex items-center gap-0.5 rounded-full px-2" style={{ background: color.surface.accent, color: color.brand, fontWeight: 700, fontSize: editorType.meta }}><MessageCircle size={10} />{unread}</span>}
     </span>
   );

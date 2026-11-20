@@ -96,7 +96,8 @@ export function EditorQuickLinks({ onOpenEditor }: { onOpenEditor: (kind: Editor
       <style>{`
         .editor-row {
           margin-left: calc(-1 * var(--row-gutter)); margin-right: calc(-1 * var(--row-gutter));
-          padding: 0 var(--row-gutter);
+          /* 위아래 8px: 가로 스크롤 칸이 세로도 잘라서 튜토리얼 강조 테두리 · 포커스 링이 잘렸다(2026-11-20). 바깥 자리는 음수 여백으로 그대로 */
+          padding: 8px var(--row-gutter); margin-top: -8px; margin-bottom: -8px;
           scroll-padding-inline: var(--row-gutter); scroll-snap-type: x proximity;
           scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain;
         }

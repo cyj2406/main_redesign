@@ -264,7 +264,7 @@ function deliverySteps(ox: number, oy: number) {
     return [bar, ...tabs];
   })() });
 
-  return { title: "배달앱 모바일 메인", summary: "배달앱 모바일 메인 화면 UI 디자인을 구성했습니다.", steps };
+  return { title: "배달앱 모바일 메인", summary: "배달앱 모바일 메인 화면을 디자인했어요.", steps };
 }
 
 function homeSteps(ox: number, oy: number, prompt: string) {
@@ -283,7 +283,7 @@ function homeSteps(ox: number, oy: number, prompt: string) {
       return [btn, T(btn, "버튼 라벨", "시작하기", 0, 16, W - 48, 16, 700, "#FFFFFF", { align: "center" })];
     })() },
   ];
-  return { title: "모바일 홈", summary: "모바일 홈 화면에 제목·카드 3개·버튼을 배치했습니다.", steps };
+  return { title: "모바일 홈", summary: "모바일 홈 화면에 제목, 카드 3개, 버튼을 배치했어요.", steps };
 }
 
 export function stepCredit(steps: AiStep[]): number {
@@ -298,7 +298,7 @@ function loginSteps(ox: number, oy: number) {
     return [T(frame, `${label} 라벨`, label, 24, y, 200, 13, 600, "#334155"), box, T(box, "placeholder", ph, 16, 15, 280, 14, 400, "#94A3B8")];
   };
   return {
-    title: "로그인", summary: "이메일·비밀번호 로그인 화면을 만들었어요. 소셜 로그인 버튼과 회원가입 링크도 넣었어요.",
+    title: "로그인", summary: "이메일과 비밀번호로 로그인하는 화면을 만들었어요. 소셜 로그인 버튼과 회원가입 링크도 넣었어요.",
     steps: [
       { label: "모바일 프레임(390×844) 만들기", nodes: [frame] },
       { label: "로고와 인사말 추가", nodes: [block(frame, "frame", "로고", 24, 96, 48, 48, { fill: "#4F7BFF", radius: 14 }), T(frame, "제목", "다시 만나서 반가워요", 24, 164, 320, 26, 800), T(frame, "설명", "이메일로 로그인해 주세요", 24, 204, 320, 14, 500, "#64748B")] },
@@ -368,7 +368,7 @@ function kitSteps(ox: number, oy: number) {
   const frame = block(null, "frame", "디자인 시스템 시작 키트", ox, oy, 1200, 720, { fill: "#FFFFFF" });
   const sw = [["Primary", "#14B86E"], ["Secondary", "#0F172A"], ["Accent", "#F59E0B"], ["Danger", "#EF4444"], ["Surface", "#F8FAFC"], ["Border", "#E2E8F0"]];
   return {
-    title: "디자인 시스템 시작 키트", summary: "색상·텍스트 스타일·버튼·입력란·카드를 담은 시작 키트를 만들었어요.",
+    title: "디자인 시스템 시작 키트", summary: "색상, 텍스트 스타일, 버튼, 입력란, 카드를 담은 시작 키트를 만들었어요.",
     steps: [
       { label: "키트 프레임 만들기", nodes: [frame, T(frame, "제목", "Design System", 48, 40, 600, 32, 800)] },
       { label: "색상 팔레트 추가", nodes: sw.flatMap(([n, c], i) => [block(frame, "rect", n, 48 + i * 180, 120, 160, 96, { fill: c, radius: 14, stroke: "#E2E8F0" }), T(frame, `${n} 이름`, `${n} ${c}`, 48 + i * 180, 226, 160, 12, 600, "#334155")]) },

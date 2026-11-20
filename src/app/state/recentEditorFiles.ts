@@ -20,7 +20,51 @@ export function readRecentEditorFiles(limit = 6): RecentEditorFile[] {
     }
   }
   for (const d of safe<{ files?: { id: string; name: string; updatedAt: number }[] }>("ddalkkak.uidesign.v1", {}).files ?? []) {
-    out.push({ kind: "uidesign", id: d.id, name: d.name, updatedAt: d.updatedAt ?? 0, app: APP_NAME.uidesign });
+    out.push({ kind: "uidesign", id: d.id, name: d.name.replace(/^Untitled board( \d+)?$/, "제목 없는 보드$1").replace(/^Untitled( \d+)?$/, "제목 없는 디자인$1"), updatedAt: d.updatedAt ?? 0, app: APP_NAME.uidesign });
   }
   return out.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
+}
+
+/**
+ * 사이드바 · 내 작업의 ⋯ 메뉴(이름 바꾸기 · 삭제, 2026-11-20). 편집기가 저장한 목록을 직접 고친다.
+ * 바뀌면 FILES_EVENT를 쏘고, App이 듣고 최근 목록을 다시 읽는다.
+ */
+export const FILES_EVENT = "ddk-files-changed";
+const notify = () => window.dispatchEvent(new Event(FILES_EVENT));
+const docKey = (kind: EditorAppId) => `ddalkkak.doceditor.${kind}.v1`;
+const read = <T,>(key: string, fallback: T): T => { try { return (JSON.parse(localStorage.getItem(key) ?? "null") as T) ?? fallback; } catch { return fallback; } };
+const write = (key: string, v: unknown) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* 이번 세션만 */ } };
+
+export function renameEditorFile(rf: RecentEditorFile, name: string) {
+  const n = name.trim(); if (!n) return;
+  if (rf.kind === "uidesign") {
+    const st = read<{ files?: { id: string; name: string }[] }>("ddalkkak.uidesign.v1", {});
+    write("ddalkkak.uidesign.v1", { ...st, files: (st.files ?? []).map((f) => (f.id === rf.id ? { ...f, name: n } : f)) });
+  } else {
+    const ext = EXT[rf.kind];
+    const bare = ext ? n.replace(new RegExp(`\\.${ext}$`, "i"), "") : n;
+    write(docKey(rf.kind), read<{ id: string; name: string }[]>(docKey(rf.kind), []).map((d) => (d.id === rf.id ? { ...d, name: bare } : d)));
+  }
+  notify();
+}
+export function deleteEditorFile(rf: RecentEditorFile) {
+  if (rf.kind === "uidesign") {
+    const st = read<{ files?: { id: string }[] }>("ddalkkak.uidesign.v1", {});
+    write("ddalkkak.uidesign.v1", { ...st, files: (st.files ?? []).filter((f) => f.id !== rf.id) });
+  } else {
+    write(docKey(rf.kind), read<{ id: string }[]>(docKey(rf.kind), []).filter((d) => d.id !== rf.id));
+  }
+  notify();
+}
+
+/** 예시 대화(서버 없음)는 이름 바꾸기 · 삭제를 이 브라우저에 덮어써 둔다. 열쇠는 처음 이름 */
+const CHAT_KEY = "ddalkkak.chatOverrides";
+type ChatOverrides = { renamed: Record<string, string>; hidden: string[] };
+export const readChatOverrides = (): ChatOverrides => read<ChatOverrides>(CHAT_KEY, { renamed: {}, hidden: [] });
+export function renameChat(orig: string, name: string) {
+  const n = name.trim(); if (!n) return;
+  const o = readChatOverrides(); write(CHAT_KEY, { ...o, renamed: { ...o.renamed, [orig]: n } }); notify();
+}
+export function hideChat(orig: string) {
+  const o = readChatOverrides(); write(CHAT_KEY, { ...o, hidden: [...o.hidden, orig] }); notify();
 }

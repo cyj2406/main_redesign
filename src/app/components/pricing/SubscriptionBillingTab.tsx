@@ -203,9 +203,9 @@ export function SubscriptionBillingTab({ onChangePlan }: { onChangePlan: () => v
         const method = addPaymentMethod(result.card, { makeDefault: true });
         setCardMethod(method);
         setCardState("ready");
-        showToast("결제 수단이 등록되었습니다.");
+        showToast("결제 수단을 등록했어요.");
       } else if (result.status === "failure") {
-        showToast("결제 수단을 등록하지 못했습니다. 다시 시도해주세요.", "error");
+        showToast("결제 수단을 등록하지 못했어요. 다시 시도해 주세요.", "error");
       }
       // cancelled: 사용자가 등록창을 닫은 것 — 오류로 과장하지 않고 조용히 기존 화면으로 복귀.
     });
@@ -284,7 +284,7 @@ export function SubscriptionBillingTab({ onChangePlan }: { onChangePlan: () => v
               {/* 해지 예약 상태에서만 나오는 복구 액션 — "요금제 변경"(헤더)과 다른 목적이라
                   같이 표시돼도 상태에 안 맞는 버튼이 겹치는 게 아니다. */}
               {subscription.status === "cancel_scheduled" && (
-                <Button variant="primary" size="md" onClick={() => { undoCancel(); showToast("구독을 계속 이용합니다"); }} className="self-start">
+                <Button variant="primary" size="md" onClick={() => { undoCancel(); showToast("구독 해지를 취소했어요."); }} className="self-start">
                   구독 계속 이용
                 </Button>
               )}
@@ -311,7 +311,7 @@ export function SubscriptionBillingTab({ onChangePlan }: { onChangePlan: () => v
             <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: color.text.muted }}>결제 수단 정보를 불러오는 중입니다…</p>
           ) : cardState === "error" ? (
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: "#ef4444" }}>결제 수단 정보를 불러오지 못했습니다.</p>
+              <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: "#ef4444" }}>결제 수단 정보를 불러오지 못했어요.</p>
               <Button variant="secondary" size="md" onClick={loadCardStatus}>다시 시도</Button>
             </div>
           ) : cardMethod ? (
@@ -334,7 +334,7 @@ export function SubscriptionBillingTab({ onChangePlan }: { onChangePlan: () => v
           ) : (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="min-w-0">
-                <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: color.text.secondary }}>등록된 결제 수단이 없습니다.</p>
+                <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: color.text.secondary }}>등록된 결제 수단이 없어요.</p>
                 <p style={{ ...f, fontWeight: 500, fontSize: 12.5, color: color.text.muted, marginTop: 4, lineHeight: 1.6 }}>
                   구독 자동결제에 사용할 카드를 등록해주세요. 카드 정보 입력과 인증은 토스페이먼츠에서 진행됩니다.
                 </p>
@@ -352,11 +352,11 @@ export function SubscriptionBillingTab({ onChangePlan }: { onChangePlan: () => v
             <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: color.text.muted }}>결제 내역을 불러오는 중입니다…</p>
           ) : historyState === "error" ? (
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: "#ef4444" }}>결제 내역을 불러오지 못했습니다.</p>
+              <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: "#ef4444" }}>결제 내역을 불러오지 못했어요.</p>
               <Button variant="secondary" size="md" onClick={loadHistory}>다시 시도</Button>
             </div>
           ) : historyItems.length === 0 ? (
-            <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: color.text.muted }}>아직 결제 내역이 없습니다.</p>
+            <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: color.text.muted }}>아직 결제 내역이 없어요.</p>
           ) : (
             <>
               <div className="flex flex-col">
@@ -451,9 +451,9 @@ export function SubscriptionBillingTab({ onChangePlan }: { onChangePlan: () => v
                       으로 옮겼다 — 문구를 지운 게 아니라 옮긴 것이다(아래 accordion 본문 참고). */}
                   <p style={{ ...f, fontWeight: 400, fontSize: 12.5, color: color.text.secondary, lineHeight: 1.6 }}>
                     {subscription.status === "cancel_scheduled" ? (
-                      <>{subscription.endDateLabel ?? "미정"}까지 이용할 수 있으며, 다음 자동 결제는 진행되지 않습니다.</>
+                      <>{subscription.endDateLabel ?? "미정"}까지 이용할 수 있고, 다음 자동 결제는 진행되지 않아요.</>
                     ) : (
-                      <>구독을 해지하면 다음 결제일({subscription.nextBillingDateLabel ?? "미정"})부터 자동 결제가 진행되지 않습니다. 현재 이용 기간까지는 계속 서비스를 이용할 수 있습니다.</>
+                      <>구독을 해지하면 다음 결제일({subscription.nextBillingDateLabel ?? "미정"})부터 자동 결제가 진행되지 않아요. 지금 이용 기간까지는 계속 쓸 수 있어요.</>
                     )}
                   </p>
                 </div>

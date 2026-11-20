@@ -43,13 +43,13 @@ export function TemplatePanel({ kind, width = 300, onPreview, onBlank, onAskAi, 
       </div>
 
       <div className="shrink-0 px-3 pt-3 pb-2">
-        <label className="flex items-center gap-2 h-10 px-3 rounded-lg" style={{ background: "#f3f4f6" }}>
+        <label className="field-pill flex items-center gap-2 h-10 px-3 rounded-lg border border-transparent" style={{ background: "#f3f4f6" }}>
           <Search size={14} color="#94a3b8" />
           <input
             value={query} onChange={(e) => setQuery(e.target.value)}
             placeholder={{ hangul: "공문, 신청서, 기안서…", word: "보고서, 회의록, 자기소개서…", excel: "견적, 지출, 급여…", ppt: "제안서, 실적 보고, 강의…", pdf: "", video: "숏폼, 브이로그, 리뷰…", image: "할인, 카드뉴스, 썸네일…" }[kind]}
             aria-label="템플릿 검색"
-            className="flex-1 min-w-0 bg-transparent outline-none" style={{ fontSize: editorType.body, color: "#111827" }}
+            className="field-inline flex-1 min-w-0 bg-transparent outline-none" style={{ fontSize: editorType.body, color: "#111827" }}
           />
           {query && <button type="button" aria-label="검색어 지우기" onClick={() => setQuery("")}><X size={13} color="#94a3b8" /></button>}
         </label>
@@ -113,9 +113,11 @@ export function TemplatePanel({ kind, width = 300, onPreview, onBlank, onAskAi, 
  * 템플릿 미리보기 창 — 큰 종이 · 이럴 때 써요 · 들어 있는 항목 · [이 서식으로 시작] [AI로 내용 채우기].
  * 지금 문서에 내용이 있으면 적용 전에 "새 문서로 열기 / 지금 문서 바꾸기"를 묻는다(docs/doc-editor.md "2-2").
  */
-export function TemplatePreview({ template, docHasContent, onApply, onClose }: {
+export function TemplatePreview({ template, docHasContent, onApply, onClose, guide }: {
   template: DocTemplate;
   docHasContent: boolean;
+  /** 시작 튜토리얼 2단계 중이면 어떤 버튼을 누를지 짚어 준다(docs/starter-tour.md) */
+  guide?: boolean;
   onApply: (opts: { withAi: boolean; target: "new" | "replace" }) => void;
   onClose: () => void;
 }) {
@@ -161,15 +163,23 @@ export function TemplatePreview({ template, docHasContent, onApply, onClose }: {
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="primary" size="md" onClick={() => start(false, close)}>이 서식으로 시작</Button>
+                  <Button variant="primary" size="md" onClick={() => start(false, close)} data-starter-pulse={guide ? "" : undefined}>이 서식으로 시작</Button>
                   <Button variant="secondary" size="md" onClick={() => start(true, close)} style={{ color: color.brand }}>
                     <Sparkles size={15} />AI로 내용 채우기
                   </Button>
                 </div>
               )}
-              <p style={{ fontSize: editorType.caption, color: "#94a3b8", marginTop: 12, wordBreak: "keep-all" }}>
-                AI로 내용 채우기: 서식을 넣고, 오른쪽 딸깍 AI에 이 서식의 빈칸이 열려요. 적은 내용으로 견본 글을 바꿔 줘요.
-              </p>
+              {guide && !asking ? (
+                /* 튜토리얼 중엔 회색 설명 대신 누를 곳을 짚는다(2026-11-20 "양식 누르면 뭘 선택할지 가이드") */
+                <p className="flex items-start gap-2 rounded-lg" style={{ fontSize: editorType.body, lineHeight: "20px", color: "#1e293b", background: color.surface.accent, padding: "10px 12px", marginTop: 12, wordBreak: "keep-all" }}>
+                  <span aria-hidden className="shrink-0 rounded-full" style={{ fontSize: 11, fontWeight: 700, color: color.brand, background: "#fff", padding: "1px 6px", marginTop: 1 }}>2/3</span>
+                  <span><b style={{ fontWeight: 700 }}>이 서식으로 시작</b>을 눌러 양식만 넣어 봐요. 내용은 다음 단계에서 딸깍 AI가 채워 줘요.</span>
+                </p>
+              ) : (
+                <p style={{ fontSize: editorType.caption, color: "#94a3b8", marginTop: 12, wordBreak: "keep-all" }}>
+                  AI로 내용 채우기: 서식을 넣고, 오른쪽 딸깍 AI에 이 서식의 빈칸이 열려요. 적은 내용으로 견본 글을 바꿔 줘요.
+                </p>
+              )}
             </div>
           </div>
         </div>

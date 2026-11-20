@@ -1,3 +1,5 @@
+import { josa } from "@/app/copy";
+
 /**
  * 요청 작성 도우미 → 워크스페이스 "확인이 필요해요" 카드 정의.
  *
@@ -124,7 +126,7 @@ const PRODUCT: RequestCardDef[] = [
     title: "핵심 특징",
     kind: "pick",
     customRows: 8,
-    candidates: (c) => [`${subject(c)}의 소재와 품질을 먼저 보여주기`, `${subject(c)}을(를) 쓰는 장면과 편리함 강조`, `${subject(c)}만의 디자인과 감성 강조`],
+    candidates: (c) => [`${subject(c)}의 소재와 품질을 먼저 보여주기`, `${josa(subject(c), "을/를")} 쓰는 장면과 편리함 강조`, `${subject(c)}만의 디자인과 감성 강조`],
   },
   TARGET,
   TONE,
@@ -241,7 +243,7 @@ const THESIS: RequestCardDef[] = [
     title: "연구 질문",
     kind: "pick",
     customRows: 3,
-    candidates: (c) => [`${subject(c)}은(는) 어떤 요인과 관련이 있는가?`, `${subject(c)}의 현재 양상은 어떠한가?`, `${subject(c)}을(를) 개선하려면 무엇이 필요한가?`],
+    candidates: (c) => [`${josa(subject(c), "은/는")} 어떤 요인과 관련이 있는가?`, `${subject(c)}의 현재 양상은 어떠한가?`, `${josa(subject(c), "을/를")} 개선하려면 무엇이 필요한가?`],
   },
   {
     id: "sections",
@@ -315,7 +317,7 @@ const VIDEO: RequestCardDef[] = [
     title: "훅 문장",
     kind: "pick",
     customRows: 3,
-    candidates: (c) => [`아직도 ${subject(c)} 모르세요?`, `${subject(c)}, 짧게 정리해 드려요`, `이걸 보면 ${subject(c)}이(가) 달라 보여요`],
+    candidates: (c) => [`아직도 ${subject(c)} 모르세요?`, `${subject(c)}, 짧게 정리해 드려요`, `이걸 보면 ${josa(subject(c), "이/가")} 달라 보여요`],
   },
   {
     id: "scenes",

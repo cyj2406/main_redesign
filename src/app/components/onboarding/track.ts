@@ -12,6 +12,12 @@ export type TrackEvent =
   | "onboarding_prev"
   | "onboarding_skip"
   | "onboarding_complete"
+  | "starter_start"
+  | "starter_step_view"
+  | "starter_follow"
+  | "starter_skip"
+  | "starter_complete"
+  | "editor_hint_click"
   | "helper_hint_view"
   | "helper_hint_click"
   | "helper_hint_dismiss";

@@ -5,6 +5,7 @@ import { getTaskById } from "@/app/data/tasks";
 import { FIELD_CLASS, FIELD_SURFACE, InputField } from "@/app/components/common/InputField";
 import { cardsForTask, TEXT_LIMITS, type CardContext, type RequestCardDef } from "@/app/data/requestCards";
 import type { RequestHandoff } from "@/app/components/home/RequestHelpScreen";
+import { josa } from "@/app/copy";
 
 /**
  * 워크스페이스 "확인이 필요해요" 카드 — 요청 작성 도우미로 들어왔을 때 기존 상세 프롬프트
@@ -215,7 +216,7 @@ export function RequestCardsPanel({ handoff, onGenerate }: { handoff: RequestHan
             ref={customRef}
             value={answer.custom}
             onChange={(v) => { setPick({ custom: v }); if (v.trim()) setError(null); }}
-            placeholder={`${card.title}을(를) 직접 적어주세요`}
+            placeholder={`${josa(card.title, "을/를")} 직접 적어 주세요`}
             aria-label={`${card.title} 직접 입력`}
             aria-invalid={!!error}
             className="outline-none"
@@ -227,7 +228,7 @@ export function RequestCardsPanel({ handoff, onGenerate }: { handoff: RequestHan
             ref={customRef}
             value={answer.custom}
             onChange={(v) => { setPick({ custom: v }); if (v.trim()) setError(null); }}
-            placeholder={`${card.title}을(를) 직접 적어주세요`}
+            placeholder={`${josa(card.title, "을/를")} 직접 적어 주세요`}
             aria-label={`${card.title} 직접 입력`}
             aria-invalid={!!error}
             style={{ ...TEXT_BOX, borderColor: error ? "#fca5a5" : LINE }}

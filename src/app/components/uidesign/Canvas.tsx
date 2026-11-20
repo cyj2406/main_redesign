@@ -16,7 +16,8 @@ import {
 } from "./model";
 
 /** 하단 툴바 도구(2026-11-19 Figma 툴바처럼 확장): 이동 묶음(이동·손) · 영역(프레임·섹션) · 도형(사각형·타원·선·화살표) · 연필 · 텍스트 · 코멘트 */
-export type Tool = "move" | "hand" | "frame" | "section" | "rect" | "ellipse" | "line" | "arrow" | "pencil" | "text" | "comment";
+/** sticky = 보드(피그잼형)의 스티커 메모 */
+export type Tool = "move" | "hand" | "frame" | "section" | "rect" | "ellipse" | "line" | "arrow" | "pencil" | "text" | "comment" | "sticky";
 export interface View { x: number; y: number; zoom: number }
 export interface Draft { frameId: string | null; x: number; y: number }
 
@@ -29,6 +30,8 @@ interface Props {
   setTool: (t: Tool) => void;
   /** 레이아웃 그리드(8px) 보기 — 툴바 오른쪽 # */
   grid?: boolean;
+  /** 보드(피그잼형) 파일 — 점 배경(2026-11-20) */
+  board?: boolean;
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
   hoverId: string | null;
@@ -60,6 +63,12 @@ interface Props {
   /** 딸깍 AI 작업 중 — 방금 그린 요소(커서 위치)와 만들고 있는 프레임 */
   aiCursorNodeId: string | null;
   aiBuildingId: string | null;
+  /** 보드 투표 세션 중(2026-11-20): 누르면 그 개체에 투표. 대상이 아니면 null을 돌려준다 */
+  voteTargetOf?: (nodeId: string) => string | null;
+  onVote?: (nodeId: string) => void;
+  onUnvote?: (nodeId: string) => void;
+  /** 내 표 — 노드 id → 표 수(개체 오른쪽 위 배지) */
+  votes?: Record<string, number>;
 }
 
 const SNAP_TEXT_EDIT = "ui-text-edit";
@@ -131,6 +140,7 @@ export function Canvas(p: Props) {
     return { x: (clientX - r.left - view.x) / view.zoom, y: (clientY - r.top - view.y) / view.zoom };
   };
   const toScreen = (wx: number, wy: number) => ({ x: view.x + wx * view.zoom, y: view.y + wy * view.zoom });
+  const pageOfNodeId = (id: string) => { let r = id; while (doc.nodes[r]?.parentId) r = doc.nodes[r].parentId!; return page.rootIds.includes(r) ? page.id : null; };
 
   const nodeIdAt = (target: EventTarget | null) => (target as HTMLElement | null)?.closest<HTMLElement>("[data-node-id]")?.dataset.nodeId ?? null;
 
@@ -180,6 +190,13 @@ export function Canvas(p: Props) {
       return;
     }
     if (e.button !== 0) return;
+    // 투표 중: 개체를 누르면 투표(이동·선택은 하지 않는다)
+    if (p.onVote && p.voteTargetOf) {
+      const h = nodeIdAt(e.target);
+      const t = h ? p.voteTargetOf(h) : null;
+      if (t) p.onVote(t);
+      return;
+    }
     if (p.editingTextId) return; // 텍스트 입력 중 바깥 클릭은 blur 가 처리
     if (p.draft && tool !== "comment") p.setDraft(null);
     const hit = nodeIdAt(e.target);
@@ -212,6 +229,17 @@ export function Canvas(p: Props) {
         return;
       }
       const countOf = (pred: (n: DNode) => boolean) => Object.values(doc.nodes).filter(pred).length + 1;
+      if (tool === "sticky") {
+        // 스티커 메모(보드): 누른 자리를 가운데로 180×180 노란 메모 + 안쪽 글자, 바로 글자 입력
+        e.preventDefault();
+        const note = makeNode("frame", parentId, lx - 90, ly - 90, 180, 180, { name: `Sticky ${countOf((n) => n.name.startsWith("Sticky"))}`, fill: "#FFE58A", radius: 4 });
+        const txt = makeNode("text", note.id, 16, 16, 148, 24, { text: "", fontSize: 16, color: "#111827", autoW: false });
+        p.commitFrom(base, addNode(addNode(base, page.id, note), page.id, txt));
+        p.setSelectedId(txt.id);
+        p.setEditingTextId(txt.id);
+        p.setTool("move");
+        return;
+      }
       if (tool === "pencil") {
         // 연필: 지나간 점을 모아 자유 선. 끝나면 점들이 들어가는 상자로 맞춘다
         const pts: [number, number][] = [[0, 0]];
@@ -333,7 +361,7 @@ export function Canvas(p: Props) {
   const sel = p.selectedId ? box(p.selectedId) : null;
   const hov = [p.hoverId, hoverCand].find((h) => h && h !== p.selectedId);
   const hovBox = hov ? box(hov) : null;
-  const cursor = panning ? "grabbing" : spaceDown || tool === "hand" ? "grab" : tool === "comment" ? COMMENT_CURSOR : tool === "move" ? "default" : tool === "text" ? "text" : "crosshair";
+  const cursor = p.onVote ? "pointer" : panning ? "grabbing" : spaceDown || tool === "hand" ? "grab" : tool === "comment" ? COMMENT_CURSOR : tool === "move" ? "default" : tool === "text" ? "text" : "crosshair";
 
   const threadPos = (t: { frameId: string | null; x: number; y: number }) => {
     if (t.frameId && doc.nodes[t.frameId]) { const a = absPos(doc, t.frameId); return toScreen(a.x + t.x, a.y + t.y); }
@@ -347,6 +375,7 @@ export function Canvas(p: Props) {
   const [pinDrag, setPinDrag] = useState<{ id: string; x: number; y: number } | null>(null);
   const pressPin = (e: React.PointerEvent, t: Thread) => {
     if (e.button !== undefined && e.button !== 0) return;
+    if (e.clientX !== undefined) e.preventDefault(); // 글자 선택·이미지 끌기가 시작되면 옮기기가 끊긴다
     const mine = t.messages[0]?.author.name === p.me.name;
     const start = threadPos(t);
     let warned = false;
@@ -405,6 +434,8 @@ export function Canvas(p: Props) {
       style={{
         background: page.bg, cursor,
         // 레이아웃 그리드(8px) — 확대에 맞춰 칸이 커지고, 화면을 옮기면 같이 움직인다
+        // 보드: 점 배경(FigJam처럼 24px 간격, 확대·이동을 따라감)
+        ...(p.board && !p.grid ? { backgroundImage: "radial-gradient(circle, rgba(17,24,39,0.18) 1px, transparent 1.4px)", backgroundSize: `${24 * view.zoom}px ${24 * view.zoom}px`, backgroundPosition: `${view.x}px ${view.y}px` } : {}),
         ...(p.grid ? { backgroundImage: "linear-gradient(rgba(239,68,68,0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(239,68,68,0.10) 1px, transparent 1px)", backgroundSize: `${8 * view.zoom}px ${8 * view.zoom}px`, backgroundPosition: `${view.x}px ${view.y}px` } : {}),
       }}
       onPointerDown={onPointerDown}
@@ -469,6 +500,17 @@ export function Canvas(p: Props) {
         </div>
       )}
       <style>{`@keyframes uiAiPulse{0%,100%{opacity:1}50%{opacity:.35}}.ui-ai-building{animation:uiAiPulse 1.2s ease-in-out infinite}@media (prefers-reduced-motion:reduce){.ui-ai-building{animation:none}}`}</style>
+      {/* 투표 배지: 개체 오른쪽 위, 누르면 내 표 하나 빼기 */}
+      {p.votes && Object.entries(p.votes).filter(([id, n]) => n > 0 && doc.nodes[id] && pageOfNodeId(id) === page.id).map(([id, n]) => {
+        const a = absPos(doc, id), s0 = toScreen(a.x + doc.nodes[id].w, a.y);
+        return (
+          <button key={`vote-${id}`} type="button" aria-label={`${doc.nodes[id].name}에 준 표 ${n}개, 누르면 하나 빼요`}
+            onPointerDown={(e) => { e.stopPropagation(); p.onUnvote?.(id); }}
+            className="absolute flex items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
+            style={{ left: s0.x - 14, top: s0.y - 14, minWidth: 28, height: 28, padding: "0 8px", background: EDITOR_ACCENT, color: "#fff", fontSize: 14, fontWeight: 700, boxShadow: "0 0 0 2px #fff, 0 2px 8px rgba(0,0,0,0.18)", zIndex: 6 }}
+          >{n}</button>
+        );
+      })}
       {pinItems.map((it) => it.kind === "cluster" ? (
         <ClusterPin
           key={it.key} x={it.x} y={it.y} count={it.threads.length}

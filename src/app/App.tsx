@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo, type ReactNode } from "react";
-import { Clapperboard, FilePen, Frame as FrameIcon, MessageSquare, Presentation, type LucideIcon, Sparkles as SparklesIcon, HelpCircle, Settings as SettingsIcon, UserRound, Users, Mail, LogOut, Palette, Bell, Brain, Coins, CreditCard, Monitor, Sun, Moon, FileText, FileVideo, FileSpreadsheet, FileType2, Compass, Image as ImageIcon, X as XIcon, Play, Volume2, Maximize2, Minimize2, BookOpen, Search, Plus, Upload, Check } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Pin, PinOff, MoreHorizontal, Pencil, Trash2, ChevronRight as ChevronRightIcon, Clapperboard, FilePen, Frame as FrameIcon, MessageSquare, Presentation, type LucideIcon, Sparkles as SparklesIcon, HelpCircle, Settings as SettingsIcon, UserRound, Users, Mail, LogOut, Palette, Bell, Brain, Coins, CreditCard, Monitor, Sun, Moon, FileText, FileVideo, FileSpreadsheet, FileType2, Compass, Image as ImageIcon, X as XIcon, Play, Volume2, Maximize2, Minimize2, BookOpen, Search, Plus, Upload, Check } from "lucide-react";
 
 // ── 공통 에셋 ──────────────────────────────────────────────────────────────────
 import svgPaths from "@/imports/새대화딸깍/svg-yz49hawimu";
@@ -20,7 +21,7 @@ import {
   FILE_TYPE_META, fileNameFor, resolveFileType,
   type ViewerFileType,
 } from "@/app/components/viewer/viewerChrome";
-import HomeOnboarding from "@/app/components/onboarding/HomeOnboarding";
+import { StarterHome } from "@/app/components/onboarding/StarterHome";
 import { MobileEditorNotice } from "@/app/components/viewer/MobileEditorNotice";
 import { ScrollableChips } from "@/app/components/common/ScrollableChips";
 import { Button } from "@/app/components/common/Button";
@@ -34,6 +35,9 @@ import FormFillDesktop from "@/app/components/formfill/FormFillDesktop";
 import RecommendedCarousel from "@/app/components/home/RecommendedCarousel";
 import HomeSearch from "@/app/components/home/HomeSearch";
 import { EditorQuickLinks, type EditorKind } from "@/app/components/home/EditorQuickLinks";
+import { HomeB } from "@/app/components/home/HomeB";
+import { MyWorkScreen as MyWorkList, PINS_EVENT } from "@/app/components/mywork/MyWorkScreen";
+import { EDITOR_APPS, EDITOR_GROUPS } from "@/app/components/editor-shell/apps";
 import SearchResultsScreen from "@/app/components/home/SearchResultsScreen";
 import AllTemplatesScreen from "@/app/components/home/AllTemplatesScreen";
 import CardNewsEditorScreen from "@/app/components/home/CardNewsEditorScreen";
@@ -48,7 +52,7 @@ import { PricingPage, type PricingTab } from "@/app/components/pricing/PricingPa
 import { SubscriptionCompletePage } from "@/app/components/pricing/SubscriptionCompletePage";
 import { SettingsCreditTab } from "@/app/components/settings/SettingsCreditTab";
 import { AiModelsSettings } from "@/app/components/settings/AiModelsSettings";
-import { readRecentEditorFiles, type RecentEditorFile } from "@/app/state/recentEditorFiles";
+import { readRecentEditorFiles, renameEditorFile, deleteEditorFile, readChatOverrides, renameChat, hideChat, FILES_EVENT, type RecentEditorFile } from "@/app/state/recentEditorFiles";
 import { SettingsBillingTab } from "@/app/components/settings/SettingsBillingTab";
 import { MyPage } from "@/app/components/mypage/MyPage";
 import { ProfileMenuButton } from "@/app/components/account/ProfileMenuButton";
@@ -981,7 +985,126 @@ const RECENT_ICON: Record<string, LucideIcon> = {
 };
 const recentIcon = (kind: string, color = "#90A1B9") => { const I = RECENT_ICON[kind] ?? FileText; return <I size={19} strokeWidth={1.66} color={color} className="shrink-0" />; };
 
-function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpen, onStartTutorial, variant = "drawer", collapsed = false, onToggleCollapsed, recentForms, currentFormId, onSelectForm, recentFiles = [], onOpenRecentFile }: {
+/** 홈 B안 사이드바 목록 — 고정(최대 5) · 최근(파일과 대화를 한 목록에, 2026-11-20 사용자 "최근 하나로 합치자"). 줄에 마우스를 올리면 📌 · ⋯(이름 바꾸기 · 삭제) */
+type SideItem = { key: string; orig: string; label: string; kind: string; at: number; file?: RecentEditorFile };
+function PlanBRecentList({ recentFiles, pins, onTogglePin, onOpenFile, onSeeAll }: {
+  recentFiles: RecentEditorFile[]; pins: string[]; onTogglePin: (key: string) => void; onOpenFile: (rf: RecentEditorFile) => void; onSeeAll: () => void;
+}) {
+  const co = readChatOverrides();
+  const items: SideItem[] = [
+    ...recentFiles.map((rf) => ({ key: `${rf.kind}:${rf.id}`, orig: rf.name, label: rf.name, kind: rf.kind, at: rf.updatedAt, file: rf })),
+    ...recentChats.filter((c) => !co.hidden.includes(c)).map((c) => ({ key: `chat:${c}`, orig: c, label: co.renamed[c] ?? c, kind: "chat", at: 0 })),
+  ];
+  const pinned = pins.map((k) => items.find((x) => x.key === k)).filter(Boolean) as SideItem[];
+  const rest = items.filter((x) => !pins.includes(x.key)).slice(0, 10);
+  const label = { ...f, fontWeight: 500, fontSize: 13, lineHeight: "20px", color: color.text.secondary, letterSpacing: "-0.2px" } as const;
+  // 묶음 이름은 모두 같은 자리(바깥 px-2 + 안쪽 px-3 = 줄 아이콘과 같은 왼쪽 선). 예전 "고정"만 📌 아이콘 + px-3이라 어긋났다
+  const section = (title: string, list: SideItem[], isPinned: boolean) => (
+    <div key={title} className="px-2" style={{ marginTop: 24 }}>
+      <p className="px-3 h-7 flex items-center" style={label}>{title}</p>
+      {list.map((it) => <SideRow key={it.key} it={it} isPinned={isPinned} onTogglePin={onTogglePin} onOpenFile={onOpenFile} />)}
+    </div>
+  );
+  return (
+    <div className="pb-4">
+      {pinned.length > 0 && section("고정", pinned, true)}
+      {rest.length > 0 && section("최근", rest, false)}
+      <div className="px-2 mt-2">
+        <button type="button" onClick={onSeeAll} className="dk-nav-item dk-nav-item--sub w-full h-10 rounded-[14px] flex items-center gap-1 px-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4f7bff]">
+          <span className="dk-nav-item__label" style={{ ...f, fontSize: 14, fontWeight: 600, letterSpacing: "-0.2px" }}>내 작업에서 모두 보기</span><ChevronRightIcon size={15} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** 사이드바 한 줄: 누르면 열기, 오른쪽 📌 · ⋯. ⋯ = 이름 바꾸기(줄 안에서 바로 고침) · 삭제(한 번 더 눌러 확인) */
+function SideRow({ it, isPinned, onTogglePin, onOpenFile }: { it: SideItem; isPinned: boolean; onTogglePin: (key: string) => void; onOpenFile: (rf: RecentEditorFile) => void }) {
+  const [menu, setMenu] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(it.label);
+  const ref = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // ⋯ 메뉴 위치(2026-11-20 사용자 "사이드바 아래에서 메뉴가 잘린다"): 사이드바 안(overflow)에 두지 않고 화면 위(portal, fixed)에 띄운다.
+  // ChatGPT · Claude · Notion 사이드바처럼 ⋯ 바로 아래 왼쪽 끝을 맞춰 열고(사이드바 밖 본문 위로 넘쳐도 된다),
+  // 아래 자리가 모자라면 ⋯ 위로 뒤집는다. 화면 오른쪽 끝도 넘지 않게 8px 안쪽으로
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!menu) { setPos(null); return; }
+    const place = () => {
+      const b = moreRef.current?.getBoundingClientRect(); const m = menuRef.current;
+      if (!b || !m) return;
+      const h = m.offsetHeight, w = m.offsetWidth, gap = 4;
+      const top = b.bottom + gap + h > window.innerHeight - 8 ? b.top - gap - h : b.bottom + gap;
+      setPos({ left: Math.min(b.left, window.innerWidth - w - 8), top: Math.max(8, top) });
+    };
+    place();
+    window.addEventListener("resize", place); window.addEventListener("scroll", place, true);
+    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+  }, [menu, confirmDel]);
+  useEffect(() => {
+    if (!menu) return;
+    const down = (e: PointerEvent) => { const t = e.target as Node; if (!ref.current?.contains(t) && !menuRef.current?.contains(t)) { setMenu(false); setConfirmDel(false); } };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { setMenu(false); setConfirmDel(false); } };
+    document.addEventListener("pointerdown", down, true); document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("pointerdown", down, true); document.removeEventListener("keydown", key); };
+  }, [menu]);
+  const commit = () => {
+    setEditing(false);
+    const n = draft.trim();
+    if (!n || n === it.label) return;
+    if (it.file) renameEditorFile(it.file, n); else renameChat(it.orig, n);
+  };
+  const remove = () => { setMenu(false); setConfirmDel(false); if (isPinned) onTogglePin(it.key); if (it.file) deleteEditorFile(it.file); else hideChat(it.orig); };
+  const icon = <span className="shrink-0 flex items-center justify-center" style={{ width: 20, height: 20 }} aria-hidden>{it.kind === "chat" ? <MessageSquare size={18} strokeWidth={1.66} color="#90A1B9" /> : recentIcon(it.kind)}</span>;
+  const iconBtn = "size-7 rounded-md flex items-center justify-center hover:bg-black/[0.06] outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#4f7bff]";
+  const item = "w-full h-9 px-2.5 rounded-lg flex items-center gap-2 text-left hover:bg-[#f1f5f9] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]";
+  if (editing) {
+    return (
+      <div className="h-10 rounded-[14px] flex items-center gap-3 pl-3 pr-2" style={{ background: "#f1f5f9" }}>
+        {icon}
+        <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onFocus={(e) => e.currentTarget.select()} onBlur={commit}
+          onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(it.label); setEditing(false); } }}
+          aria-label="새 이름" className="field-inline flex-1 min-w-0 bg-transparent outline-none" style={{ ...f, fontSize: 14, lineHeight: "20px", color: color.text.primary }} />
+      </div>
+    );
+  }
+  return (
+    <div ref={ref} className="group relative">
+      <button type="button" title={it.label} onClick={() => it.file && onOpenFile(it.file)}
+        className={`dk-nav-item dk-nav-item--sub w-full h-10 rounded-[14px] flex items-center gap-3 pl-3 ${menu ? "pr-[68px]" : "pr-3 group-hover:pr-[68px]"} text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4f7bff]`}>
+        {icon}
+        <span className="dk-nav-item__label truncate" style={{ ...f, fontWeight: 400, fontSize: 14, lineHeight: "20px", letterSpacing: "-0.2px" }}>{it.label}</span>
+      </button>
+      {/* 📌 · ⋯ 모두 마우스를 올렸을 때만(2026-11-20 사용자 "고정돼도 계속 뜨지 말고 호버 시"). 고정한 줄은 "고정" 묶음에 있어서 따로 표시가 없어도 안다 */}
+      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center">
+        <button ref={moreRef} type="button" aria-label={`${it.label} 더 보기`} title="더 보기" aria-expanded={menu} onClick={() => { setMenu((v) => !v); setConfirmDel(false); }}
+          className={`${iconBtn} ${menu ? "opacity-100 bg-black/[0.06]" : "opacity-0 group-hover:opacity-100"}`}>
+          <MoreHorizontal size={16} color="#64748b" />
+        </button>
+        <button type="button" aria-label={isPinned ? `${it.label} 고정 풀기` : `${it.label} 고정하기`} title={isPinned ? "고정 풀기" : "고정하기"} onClick={() => onTogglePin(it.key)}
+          className={`${iconBtn} ${menu ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+          {isPinned ? <PinOff size={14} color="#64748b" /> : <Pin size={14} color="#64748b" />}
+        </button>
+      </div>
+      {menu && createPortal(
+        <div ref={menuRef} role="menu" aria-label={`${it.label} 메뉴`} className="fixed z-[200] w-[184px] bg-white rounded-xl p-1.5" style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, boxShadow: "0px 8px 32px rgba(0,0,0,0.14)", border: "1px solid #e5e7eb" }}>
+          <button type="button" role="menuitem" onClick={() => { setMenu(false); setDraft(it.label); setEditing(true); }} className={item} style={{ ...f, fontSize: 14, color: color.text.primary }}>
+            <Pencil size={15} color="#64748b" />이름 바꾸기
+          </button>
+          <button type="button" role="menuitem" onClick={() => (confirmDel ? remove() : setConfirmDel(true))} className={item} style={{ ...f, fontSize: 14, fontWeight: confirmDel ? 600 : 400, color: "#dc2626" }}>
+            <Trash2 size={15} color="#dc2626" />{confirmDel ? "한 번 더 누르면 삭제돼요" : "삭제"}
+          </button>
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+}
+
+function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpen, onStartTutorial, variant = "drawer", collapsed = false, onToggleCollapsed, recentForms, currentFormId, onSelectForm, recentFiles = [], onOpenRecentFile, planB = false, onNewEditor }: {
   open: boolean; onClose: () => void;
   currentScreen: Screen; onNavigate: (s: Screen) => void;
   onSettingsOpen: () => void;
@@ -996,13 +1119,46 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
   /** 최근 작업 — 편집기에서 만든 파일(편집기 아이콘 + 이름). 누르면 그 편집기를 그 파일로 연다(2026-11-19) */
   recentFiles?: RecentEditorFile[];
   onOpenRecentFile?: (f: RecentEditorFile) => void;
+  /** 홈 B안 사이드바(2026-11-20 시안, docs/home-plan-b.md): [＋ 새로 만들기 · 홈 · 내 작업], 고정 묶음, 최근 하나로(오늘 · 이번 주 · 이전), 접힌 줄에 최근 파일 아이콘, 접힌 줄에 마우스를 올리면 떠오름 */
+  planB?: boolean;
+  onNewEditor?: (kind: EditorKind) => void;
 }) {
   const nav = (s: Screen) => { onNavigate(s); onClose(); };
+  // ── B안 상태 ──
+  const [peek, setPeek] = useState(false);
+  const peekTimer = useRef<number | undefined>(undefined);
+  const [newOpen, setNewOpen] = useState(false);
+  // 새로 만들기 메뉴: 바깥을 누르거나 Esc면 닫는다(2026-11-20)
+  const newWrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!newOpen) return;
+    const down = (e: PointerEvent) => { if (!newWrapRef.current?.contains(e.target as Node)) setNewOpen(false); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setNewOpen(false); };
+    document.addEventListener("pointerdown", down, true);
+    document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("pointerdown", down, true); document.removeEventListener("keydown", key); };
+  }, [newOpen]);
+  const [pins, setPins] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem("ddalkkak.sidebarPins") ?? "[]") as string[]; } catch { return []; } });
+  const togglePin = (key: string) => setPins((p) => {
+    const n = p.includes(key) ? p.filter((x) => x !== key) : [key, ...p].slice(0, 5);
+    try { localStorage.setItem("ddalkkak.sidebarPins", JSON.stringify(n)); } catch { /* 이번 세션만 */ }
+    window.setTimeout(() => window.dispatchEvent(new Event(PINS_EVENT)), 0);
+    return n;
+  });
+  // 내 작업 화면에서 고정을 바꾸면 사이드바도 따라간다
+  useEffect(() => {
+    const on = () => { try { setPins(JSON.parse(localStorage.getItem("ddalkkak.sidebarPins") ?? "[]") as string[]); } catch { /* 그대로 */ } };
+    window.addEventListener(PINS_EVENT, on);
+    return () => window.removeEventListener(PINS_EVENT, on);
+  }, []);
   const isHomeVariant = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai"].includes(currentScreen);
   const active = (s: Screen) => s === currentScreen || (isHomeVariant && s === "home");
   const docked = variant === "docked";
   // 접기는 도킹 컬럼에서만 일어난다. 오버레이 드로어는 열림/닫힘만 있다.
-  const railed = docked && collapsed;
+  const railedRaw = docked && collapsed;
+  // B안: 접힌 줄에 마우스를 올리면 사이드바 전체가 화면 위로 떠오른다(본문은 밀지 않음, Notion 방식)
+  const peeking = planB && railedRaw && peek;
+  const railed = railedRaw && !peeking;
 
   return (
     <>
@@ -1011,11 +1167,15 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
           style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }} />
       )}
       <div className={docked
-        ? "h-full shrink-0 bg-white border-r border-[#dfe6ed] flex flex-col transition-[width] duration-300"
+        ? "relative h-full shrink-0 bg-white border-r border-[#dfe6ed] flex flex-col transition-[width] duration-300"
         : "fixed top-0 left-0 h-full z-50 bg-white border-r border-[#dfe6ed] flex flex-col transition-transform duration-300"}
         style={docked
-          ? { width: railed ? SIDEBAR_RAIL_W : SIDEBAR_W }
-          : { width: SIDEBAR_W, transform: open ? "translateX(0)" : "translateX(-100%)" }}>
+          ? { width: railedRaw ? SIDEBAR_RAIL_W : SIDEBAR_W }
+          : { width: SIDEBAR_W, transform: open ? "translateX(0)" : "translateX(-100%)" }}
+        // 접힌 줄에 마우스를 올리면 떠오르던 동작은 뺐다(2026-11-20, 사용자 "호버 시 열리는 거 불편"): 지나가기만 해도 튀어나와 방해됐다.
+        // 펼치기는 맨 위 로고(마우스를 올리면 ≡) 누르기로만. 접힌 줄의 ＋ 메뉴는 줄 밖으로 떠서 그대로 쓸 수 있다
+        onMouseLeave={planB && railedRaw ? () => setNewOpen(false) : undefined}>
+        <div className={peeking ? "absolute inset-y-0 left-0 z-[60] bg-white border-r border-[#dfe6ed] flex flex-col" : "contents"} style={peeking ? { width: SIDEBAR_W, boxShadow: "8px 0 32px rgba(15,23,42,0.12)" } : undefined}>
         {/* Header — 로고 + 토글. 레일에서는 평소엔 로고 마크만 보이다가, 호버하면
             로고가 사라지고 그 자리에 펼치기 토글이 나타난다(같은 76px 폭 안에서 자리를 바꿔치기). */}
         <div className={`flex items-center h-[60px] shrink-0 ${railed ? "justify-center px-0" : "justify-between px-4"}`}>
@@ -1055,7 +1215,7 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
             {[
               { s: "home" as Screen, icon: <IconHome />, label: "홈" },
               { s: "mywork" as Screen, icon: <IconWork />, label: "내 작업" },
-              { s: "favorites" as Screen, icon: <IconStar />, label: "즐겨찾기" },
+              ...(planB ? [] : [{ s: "favorites" as Screen, icon: <IconStar />, label: "즐겨찾기" }]),
             ].map(({ s, icon, label }) => (
               <button key={s} onClick={() => nav(s)}
                 aria-current={active(s) ? "page" : undefined}
@@ -1072,11 +1232,45 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
                 )}
               </button>
             ))}
+            {/* 2026-11-20: 사용자 "홈이 맨 위가 편할 듯" → 홈 · 내 작업(가는 곳) 다음에 새로 만들기(만드는 버튼). 메뉴와 같은 모양이라 Notion · Figma처럼 메뉴 아래 */}
+            {planB && (
+              <div className="relative" ref={newWrapRef}>
+                <button type="button" onClick={() => setNewOpen((v) => !v)} aria-expanded={newOpen} aria-label={railed ? "새로 만들기" : undefined} title={railed ? "새로 만들기" : undefined}
+                  className={`dk-nav-item h-12 rounded-[14px] flex items-center w-full outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4f7bff] ${railed ? "justify-center" : "gap-3 px-3"}`}
+>
+                  {/* 2026-11-20 색 정리 3차(사용자 "그냥 다른 거랑 똑같이"): 홈 · 내 작업과 완전히 같은 색 · 굵기 · 크기 */}
+                  <Plus size={20} strokeWidth={1.8} />
+                  {!railed && <span className="dk-nav-item__label" style={{ ...f, fontWeight: 500, fontSize: 16, lineHeight: "24px", letterSpacing: "-0.35px" }}>새로 만들기</span>}
+                </button>
+                {newOpen && (
+                  // 접힌 줄: 메뉴가 스크롤 영역(overflow) 안이라 줄 밖으로 뜨면 잘려 안 보였다 → 버튼 위치 기준 fixed로 띄운다(2026-11-20)
+                  // 2026-11-20: 2열 그림 격자 → 종류별 한 줄 목록(편집기가 늘어도 줄만 추가). 줄 36px · 아이콘 20px · 넘치면 메뉴 안에서 스크롤
+                  <div className={`z-[70] bg-white rounded-xl py-1.5 w-[232px] overflow-y-auto ${railed ? "fixed" : "absolute left-0 top-full mt-2"}`} style={{ boxShadow: "0px 8px 32px rgba(0,0,0,0.14)", border: "1px solid #e5e7eb", scrollbarWidth: "thin", ...(railed && newWrapRef.current ? (() => { const r = newWrapRef.current.getBoundingClientRect(); const top = Math.max(8, Math.min(r.top, window.innerHeight - 420)); return { left: r.right + 14, top, maxHeight: window.innerHeight - top - 8 }; })() : { maxHeight: "min(480px, 70vh)" }) }} role="menu" aria-label="새로 만들기">
+                    {EDITOR_GROUPS.map((g, gi) => (
+                      <div key={g.label} role="group" aria-label={g.label} style={gi ? { borderTop: "1px solid #f1f5f9", marginTop: 6, paddingTop: 6 } : undefined}>
+                        <p className="px-3 pt-1 pb-1" style={{ ...f, fontSize: 12, fontWeight: 600, color: color.text.secondary }}>{g.label}</p>
+                        {g.ids.map((id) => EDITOR_APPS.find((a) => a.id === id)!).map((a) => (
+                          <button key={a.id} type="button" role="menuitem" title={a.hint} onClick={() => { setNewOpen(false); setPeek(false); onNewEditor?.(a.id); onClose(); }} className="w-[calc(100%-12px)] mx-1.5 h-9 rounded-lg flex items-center gap-2.5 px-2 text-left hover:bg-[#f1f5f9] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]">
+                            <img src={a.art} alt="" className="size-5 object-contain shrink-0" />
+                            <span style={{ ...f, fontSize: 14, fontWeight: 500, color: "#1e293b" }}>{a.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* B안 접힌 줄의 최근 파일 아이콘은 2026-11-20 뺐다(사용자 "밑에 거 보여 줘야 함?"): 같은 아이콘(#)이 반복돼 어느 파일인지 알 수 없고, 마우스를 올리면 떠오르는 사이드바에 이름과 함께 이미 보인다 */}
+
+          {/* B안 펼친 사이드바: 고정 + 최근(오늘 · 이번 주 · 이전) 하나로 */}
+          {planB && !railed && <PlanBRecentList recentFiles={recentFiles} pins={pins} onTogglePin={togglePin} onOpenFile={(rf) => { setPeek(false); onOpenRecentFile?.(rf); onClose(); }} onSeeAll={() => { setPeek(false); nav("mywork"); }} />}
 
           {/* 레일(아이콘만 접힘)에서는 이 아래를 전부 숨긴다 — 제목·파일명이 76px 폭에
               들어가지 않는다(기존 동작 그대로, 자리만 옮겼다). */}
-          {!railed && (
+          {!railed && !planB && (
             <>
               {/* 최근 서식 — 주요 메뉴와 28px(24~32px 범위), 섹션 라벨 13px/500/20,
                   secondary 토큰. 라벨은 px-3로 위 메뉴 버튼의 아이콘 시작선(8+12=20px)과
@@ -1121,7 +1315,7 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
                 <p style={{ ...f, fontWeight: 500, fontSize: 13, lineHeight: "20px", color: color.text.secondary, letterSpacing: "-0.2px" }}>{recentFiles.length ? "최근 작업" : "최근 대화"}</p>
               </div>
               <div className="px-2 pb-2" style={{ marginTop: 8 }}>
-                {recentFiles.map((rf) => (
+                {recentFiles.slice(0, 6).map((rf) => (
                   <button key={`${rf.kind}:${rf.id}`} type="button" title={`${rf.app} · ${rf.name}`} onClick={() => { onOpenRecentFile?.(rf); onClose(); }}
                     className="dk-nav-item dk-nav-item--sub w-full h-10 rounded-[14px] flex items-center gap-3 px-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4f7bff]">
                     <span className="shrink-0 flex items-center justify-center" style={{ width: 20, height: 20 }}>{recentIcon(rf.kind)}</span>
@@ -1138,6 +1332,7 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
               </div>
             </>
           )}
+        </div>
         </div>
       </div>
       <style>{`
@@ -2003,6 +2198,18 @@ function FormsAIScreen({ activeTab, onTabChange, sortOption, onSortChange, scrol
 }
 
 // ─── 화면 컴포넌트 ────────────────────────────────────────────────────────────
+
+/** 홈 시안 비교 스위치(2026-11-20, 임시) — 오른쪽 아래. B안을 지우면 이것도 지운다 */
+function HomeVariantSwitch({ value, onChange }: { value: "a" | "b"; onChange: (v: "a" | "b") => void }) {
+  return (
+    <div className="fixed bottom-5 right-5 z-40 flex items-center gap-1 rounded-full bg-white p-1" style={{ ...f, boxShadow: "0px 8px 24px rgba(15,23,42,0.14)", border: `1px solid ${color.border.default}` }} role="radiogroup" aria-label="홈 시안">
+      <span className="pl-3 pr-1" style={{ fontSize: 13, fontWeight: 600, color: color.text.secondary }}>홈 시안</span>
+      {([["a", "지금 홈"], ["b", "B안"]] as const).map(([v, l]) => (
+        <button key={v} type="button" role="radio" aria-checked={value === v} onClick={() => onChange(v)} className="h-8 px-3 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ fontSize: 13, fontWeight: 600, background: value === v ? "#111827" : "transparent", color: value === v ? "#fff" : "#334155" }}>{l}</button>
+      ))}
+    </div>
+  );
+}
 
 function HomeScreen({ onSelectTask, onOpenCardNews, onOpenEditor, onSearch, onHelp, onViewAllTemplates, autoFocusHelper, onAutoFocusHelperHandled }: {
   onSelectTask: (taskId: string) => void;
@@ -4463,7 +4670,7 @@ function WsResult({ category, templateName, fileType }: {
       {/* 완료 안내 텍스트 (글자가 쭉 이어지는 형식) */}
       <div className="px-1">
         <p style={{ ...f, fontWeight: 400, fontSize: 14.5, color: "#0a0a0a", lineHeight: 1.7 }}>
-          <b style={{ fontWeight: 700 }}>'{templateName}'</b> 제작이 완료되었습니다.
+          <b style={{ fontWeight: 700 }}>'{templateName}'</b> 제작을 마쳤어요.
         </p>
         <p style={{ ...f, fontWeight: 400, fontSize: 14, color: "#374151", lineHeight: 1.75, marginTop: 10 }}>{r.intro}</p>
 
@@ -5271,6 +5478,10 @@ export default function App() {
   const [docEditor, setDocEditor] = useState<DocKind | null>(null);
   // 사이드바 "최근 작업"에서 연 파일 — 편집기를 그 파일로 연다(없으면 새 빈 파일)
   const [docInitialId, setDocInitialId] = useState<string | undefined>();
+  // 홈 B안(2026-11-20 시안) — 지우려면 이 블록 · HomeB 렌더 · HomeVariantSwitch · components/home/HomeB.tsx 를 지운다
+  const [homeVariant, setHomeVariantRaw] = useState<"a" | "b">(() => { try { return localStorage.getItem("ddalkkak.homeVariant") === "b" ? "b" : "a"; } catch { return "a"; } });
+  const setHomeVariant = (v: "a" | "b") => { setHomeVariantRaw(v); try { localStorage.setItem("ddalkkak.homeVariant", v); } catch { /* 이번 세션만 */ } };
+  const [docStart, setDocStart] = useState<{ template?: { id: string; withAi: boolean }; prompt?: string; key: number } | undefined>();
   const [uiInitialId, setUiInitialId] = useState<string | undefined>();
   /** 에디터(UI 디자인·한글·워드)는 한 번에 하나. 닫을 때는 둘 다 닫는다 */
   const setUiDesignOpen = (open: boolean) => { setUiDesignOpenRaw(open); setDocEditor(null); };
@@ -5279,7 +5490,7 @@ export default function App() {
    *  공통 셸 편집기(doceditor, 2026-11-19). 예전엔 빈 템플릿 워크스페이스를 열었다. */
   const openEditor = (kind: EditorKind) => {
     if (kind === "layer") { setLayerEditorOpen(true); return; }
-    setDocInitialId(undefined); setUiInitialId(undefined);
+    setDocInitialId(undefined); setUiInitialId(undefined); setDocStart(undefined);
     if (kind === "uidesign") { setUiDesignOpen(true); return; }
     setUiDesignOpenRaw(false);
     setDocEditor(kind);
@@ -5394,10 +5605,14 @@ export default function App() {
   /** 프로필 메뉴 동작: 서비스 상단바와 에디터 공통 헤더가 같이 쓴다. 다른 화면으로 가는 항목은 에디터를 닫고 간다.
    *  문의하기·커뮤니티·로그아웃은 실제 주소·로그인 연동 전이라 안내만(2026-11-19). */
   // 편집기를 닫거나 화면을 옮길 때마다 다시 읽는다(편집기가 이 브라우저에 저장한 목록)
-  const recentFiles = useMemo(() => readRecentEditorFiles(), [docEditor, uiDesignOpen, screen]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 사이드바 고정은 오래된 파일도 찾아야 해서 넉넉히 읽는다(최근 목록은 PlanBRecentList가 10개로 자른다)
+  const [filesTick, setFilesTick] = useState(0);
+  useEffect(() => { const on = () => setFilesTick((n) => n + 1); window.addEventListener(FILES_EVENT, on); return () => window.removeEventListener(FILES_EVENT, on); }, []);
+  const recentFiles = useMemo(() => readRecentEditorFiles(200), [docEditor, uiDesignOpen, screen, filesTick]); // eslint-disable-line react-hooks/exhaustive-deps
   const openRecentFile = (rf: RecentEditorFile) => {
     if (rf.kind === "uidesign") { setUiInitialId(rf.id); setUiDesignOpen(true); return; }
     setDocInitialId(rf.id);
+    setDocStart(undefined);
     setUiDesignOpenRaw(false);
     setDocEditor(rf.kind as DocKind);
   };
@@ -5406,7 +5621,7 @@ export default function App() {
   const switchApp = (appId: string) => {
     const kinds: Record<string, EditorKind> = { word: "word", hangul: "hangul", excel: "excel", ppt: "ppt", pdf: "pdf", image: "image", video: "video", uidesign: "uidesign" };
     const k = kinds[appId];
-    if (!k) { showToast("이 도구는 아직 이 화면에서 열 수 없어요(준비 중)."); return; }
+    if (!k) { showToast("이 도구는 아직 준비 중이에요."); return; }
     setUiDesignOpen(false);
     openEditor(k);
   };
@@ -5430,6 +5645,9 @@ export default function App() {
       {/* 편집기 안에서도 데스크톱은 서비스 사이드바를 아이콘 레일로 접어 붙여 둔다(2026-11-19, dev 화면과 같게) —
           홈·내 작업·즐겨찾기로 바로 간다. 편집기에 들어가면 inWorkspace 효과가 레일로 접는다. 좁은 화면은 예전처럼 숨김 */}
       {(!editorOpen || isDesktop) && <SidebarDrawer
+        // 2026-11-20: 사이드바 정리(홈 · 내 작업 · ＋ 새로 만들기 · 고정 · 최근 하나로)는 지금 홈 · B안 공통. 두 시안은 홈 메인 화면만 다르다
+        planB
+        onNewEditor={openEditor}
         recentFiles={recentFiles}
         onOpenRecentFile={openRecentFile}
         variant={isDesktop ? "docked" : "drawer"}
@@ -5454,7 +5672,19 @@ export default function App() {
         bellRef={bellRef}
         profileMenu={profileMenu}
       />
-      {screen === "home" && (
+      {screen === "home" && homeVariant === "b" && (
+        <HomeB
+          recent={recentFiles.slice(0, 6)}
+          onOpenEditor={(k) => openEditor(k)}
+          onOpenTemplate={(tpl, withAi) => { setDocInitialId(undefined); setUiDesignOpenRaw(false); setDocStart({ template: { id: tpl.id, withAi }, key: Date.now() }); setDocEditor(tpl.kind); }}
+          onAskAi={(k, prompt) => { setDocInitialId(undefined); setUiDesignOpenRaw(false); setDocStart({ prompt, key: Date.now() }); setDocEditor(k); }}
+          onOpenRecent={openRecentFile}
+          onHelp={() => navigate("request-help")}
+          onViewAllTemplates={() => navigate("templates")}
+        />
+      )}
+      {screen === "home" && !editorOpen && !workspace && <HomeVariantSwitch value={homeVariant} onChange={setHomeVariant} />}
+      {screen === "home" && homeVariant === "a" && (
         <HomeScreen
           // 카드(전체 기능·대표 카테고리·바로 시작하기 캐러셀)를 눌러도 더 이상 아무
           // 화면도 열지 않는다(2026-09-18, "템플릿을 골라 주세요" 목록 화면 제거) —
@@ -5572,7 +5802,8 @@ export default function App() {
         />
       )}
       {screen === "favorites" && <FavoritesScreen />}
-      {screen === "mywork" && <MyWorkScreen onGoHome={() => navigate("home")} />}
+      {/* 내 작업(2026-11-20 다시 정리): 편집기 파일 + 대화 한 목록, 종류 칩, 고정 · 정렬 — components/mywork/MyWorkScreen.tsx. 예전 MyWorkScreen(대화만)은 아래에 남아 있다 */}
+      {screen === "mywork" && <MyWorkList chats={(() => { const co = readChatOverrides(); return myWorkItems.filter((x) => !co.hidden.includes(x.title)).map((x) => ({ title: co.renamed[x.title] ?? x.title, orig: x.title, date: x.date })); })()} onOpenFile={openRecentFile} onGoHome={() => navigate("home")} />}
       {/* 태블릿(768~1199px)에서는 HomeScreen 이 스크롤 흐름 끝에서 직접 렌더한다. */}
       {screen === "home" && !isTabletRange && <Footer />}
       {screen === "notifications-all" && <NotificationsAllScreen />}
@@ -5614,19 +5845,23 @@ export default function App() {
           onBack={() => setUiDesignOpen(false)}
           onBellClick={() => setNotifOpen(true)}
           profileMenu={profileMenu}
-          onSwitchApp={switchApp}
+          // 편집기 바꾸기 ▾ 없음(새 파일은 사이드바 ＋): 지금 홈 · B안 공통(2026-11-20). EditorHeader는 onSwitchApp이 없으면 아이콘 + 제목, 데스크톱에서 ‹ 숨김
+          onSwitchApp={undefined}
           onManageModels={() => openSettingsAt("AI 모델")}
         />
       )}
       {docEditor && (
         <DocEditor
-          key={`${docEditor}:${docInitialId ?? "new"}`}
+          key={`${docEditor}:${docInitialId ?? "new"}:${docStart?.key ?? 0}`}
           kind={docEditor}
           initialDocId={docInitialId}
+          initialTemplate={docStart?.template}
+          initialPrompt={docStart?.prompt}
           onBack={() => setDocEditor(null)}
           onBellClick={() => setNotifOpen(true)}
           profileMenu={profileMenu}
-          onSwitchApp={switchApp}
+          // 편집기 바꾸기 ▾ 없음(새 파일은 사이드바 ＋): 지금 홈 · B안 공통(2026-11-20). EditorHeader는 onSwitchApp이 없으면 아이콘 + 제목, 데스크톱에서 ‹ 숨김
+          onSwitchApp={undefined}
           onManageModels={() => openSettingsAt("AI 모델")}
         />
       )}
@@ -5647,7 +5882,9 @@ export default function App() {
       ) : (
         <NotificationsPanel onClose={() => setNotifOpen(false)} onViewAll={() => { setNotifOpen(false); navigate("notifications-all"); }} />
       ))}
-      <HomeOnboarding enabled={screen === "home" && !workspace && !editorOpen && !settingsOpen} isDesktop={isDesktop} replayToken={onboardingReplay} />
+      {/* 시작 튜토리얼(홈 → 한글 편집기 → 템플릿 → 딸깍 AI, 3단계). 지금 홈과 B안 모두(2026-11-20). docs/starter-tour.md
+          예전 홈 온보딩(HomeOnboarding: 검색창 → 편집기 줄)은 더 띄우지 않는다. 파일은 남겨 둔다 */}
+      <StarterHome variant={homeVariant} enabled={screen === "home" && !workspace && !editorOpen && !settingsOpen} replayToken={onboardingReplay} onFollow={() => openEditor("hangul")} />
       {settingsOpen && (
         <SettingsModal
           key={settingsNavKey}
@@ -5677,8 +5914,11 @@ export default function App() {
           onBack={() => setScreen("forms-ai")}
           sidebar={
             <SidebarDrawer
-        recentFiles={recentFiles}
-        onOpenRecentFile={openRecentFile}
+              // 2026-11-20: 서식 채우기 화면도 같은 사이드바(홈 · 내 작업 · 새로 만들기 · 고정 · 최근)
+              planB
+              onNewEditor={openEditor}
+              recentFiles={recentFiles}
+              onOpenRecentFile={openRecentFile}
               variant="docked"
               open
               onClose={() => {}}

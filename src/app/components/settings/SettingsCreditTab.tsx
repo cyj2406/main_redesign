@@ -25,7 +25,7 @@ export function SettingsCreditTab({ onTopUp }: { onTopUp: () => void }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionHead title="크레딧" desc="보유한 크레딧 잔액과 사용 내역을 확인할 수 있습니다." />
+      <SectionHead title="크레딧" desc="남은 크레딧과 사용 내역을 확인할 수 있어요." />
       <CreditBalanceCard liveBalance={liveBalance} subscription={subscription} onTopUp={onTopUp} />
       <CreditHistorySection />
     </div>

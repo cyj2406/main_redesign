@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link2 } from "lucide-react";
+import { ChevronDown, Link2 } from "lucide-react";
 
 import { showToast } from "@/app/components/common/Toast";
 import { ProfileAvatar } from "@/app/components/mypage/ProfileAvatar";
@@ -29,16 +29,22 @@ export function SharePopover({ fileName, accent, onClose }: { fileName: string; 
     <div ref={ref} className="absolute right-0 top-10 bg-white rounded-xl z-50" style={{ ...f, width: 340, padding: 16, boxShadow: "0px 8px 32px rgba(0,0,0,0.14)", border: "1px solid #e5e7eb" }} role="dialog" aria-label="공유">
       <p style={{ fontSize: editorType.large, fontWeight: 700, color: "#111827" }}>“{fileName}” 공유</p>
       <div className="flex gap-2 mt-3">
-        <div className="flex-1 min-w-0 flex items-center rounded-lg border border-[#e5e7eb] focus-within:border-[#4f7bff]">
-          <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="이메일로 초대" className="flex-1 min-w-0 px-3 h-8 outline-none bg-transparent" style={{ fontSize: editorType.large }} />
-          <select value={role} onChange={(e) => setRole(e.target.value as typeof role)} className="h-8 pr-1 bg-transparent outline-none" style={{ fontSize: editorType.caption, color: "#475569" }} aria-label="권한">
-            <option>편집 가능</option><option>코멘트 가능</option><option>보기 가능</option>
-          </select>
+        {/* 2026-11-20 정리: 안쪽 select에 전역 포커스 상자가 따로 떠서 각진 박스가 생기고, 기본 화살표가 칸에서 어긋났다 →
+            select도 field-inline(바깥 둥근 칸만 파랗게), 기본 화살표를 숨기고 lucide ChevronDown, 앞에 세로 구분선. 높이는 공통 40px */}
+        <div className="field-pill flex-1 min-w-0 flex items-center rounded-lg border border-[#e5e7eb] h-10 overflow-hidden">
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="이메일로 초대" aria-label="초대할 이메일" className="field-inline flex-1 min-w-0 px-3 h-full outline-none bg-transparent text-ellipsis placeholder:text-[#64748b]" style={{ fontSize: editorType.body, color: "#111827" }} />
+          <span aria-hidden className="w-px h-5 shrink-0" style={{ background: "#e5e7eb" }} />
+          <label className="relative shrink-0 h-full flex items-center">
+            <select value={role} onChange={(e) => setRole(e.target.value as typeof role)} className="field-inline h-full pl-2.5 pr-7 bg-transparent outline-none appearance-none cursor-pointer" style={{ fontSize: editorType.label, color: "#334155" }} aria-label="권한">
+              <option>편집 가능</option><option>코멘트 가능</option><option>보기 가능</option>
+            </select>
+            <ChevronDown size={14} color="#64748b" className="absolute right-2 pointer-events-none" />
+          </label>
         </div>
         <button
           type="button" disabled={!valid}
-          onClick={() => { setInvited((l) => [...l, { email: email.trim(), role }]); setEmail(""); showToast("초대를 보냈어요. (예시라 실제 메일은 가지 않아요)"); }}
-          className="rounded-lg px-3 h-8" style={{ fontSize: editorType.label, fontWeight: 700, color: "#fff", background: valid ? accent : "#cbd5e1" }}
+          onClick={() => { setInvited((l) => [...l, { email: email.trim(), role }]); setEmail(""); showToast("초대를 보냈어요. 예시라서 실제 메일은 가지 않아요."); }}
+          className="rounded-lg px-4 h-10 shrink-0" style={{ fontSize: editorType.body, fontWeight: 600, color: "#fff", background: valid ? accent : "#cbd5e1" }}
         >
           초대
         </button>

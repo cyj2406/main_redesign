@@ -34,11 +34,11 @@ export function CancelSubscriptionDialog({
     cancelSubscriptionWithServer().then(({ success }) => {
       setLoading(false);
       if (!success) {
-        setError("구독을 해지하지 못했습니다. 다시 시도해주세요.");
+        setError("구독을 해지하지 못했어요. 다시 시도해 주세요.");
         return;
       }
       scheduleCancel();
-      showToast("구독 해지가 예약되었습니다");
+      showToast("구독 해지를 예약했어요.");
       onCancelled();
     });
   };

@@ -2398,7 +2398,7 @@ export default function TabletMiniEditor({
     setSaving(true);
     setSaveFailed(false);
     // 되돌리기 알림이 남아 있으면 지운다 — 그 직후의 평범한 저장까지
-    // "되돌렸습니다"로 읽히면 안 된다.
+    // "되돌렸어요"로 읽히면 안 된다.
     setRevertedTo(null);
 
     // [목업] 지연은 여기 한 곳에서만 생긴다 — 실제 저장 API 가 붙으면
@@ -2895,8 +2895,8 @@ export default function TabletMiniEditor({
               {saving
                 ? "저장 중"
                 : revertedTo !== null
-                  ? `저장본 ${revertedTo}로 되돌렸습니다.`
-                  : justSaved ? `저장되었습니다. 저장본 ${currentVersion?.no ?? 0}.` : ""}
+                  ? `저장본 ${revertedTo}로 되돌렸어요.`
+                  : justSaved ? `저장했어요. 저장본 ${currentVersion?.no ?? 0}` : ""}
             </span>
           </div>
 

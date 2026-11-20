@@ -73,24 +73,24 @@ export function PricingPage({
    */
   const handleConfirmSubscription = async (planId: string, isPlanChange: boolean, selectedPaymentMethodId?: string): Promise<PurchaseConfirmResult> => {
     const plan = findPlan(planId);
-    if (!plan) return { success: false, message: "요금제 정보를 찾을 수 없습니다." };
+    if (!plan) return { success: false, message: "요금제 정보를 찾을 수 없어요." };
 
     // 확인창이 방금 카드를 등록했을 수 있어 렌더 시점의 subscription 대신 최신 상태를 읽는다.
     const current = getSubscription();
     if (!current.paymentMethod && !selectedPaymentMethodId) {
       const cardResult = await registerCardWithTossPayments();
       if (cardResult.status === "cancelled") return { success: false };
-      if (cardResult.status === "failure") return { success: false, message: "카드 등록에 실패했습니다. 다시 시도해주세요." };
+      if (cardResult.status === "failure") return { success: false, message: "카드를 등록하지 못했어요. 다시 시도해 주세요." };
       addPaymentMethod(cardResult.card, { makeDefault: true });
     } else if (selectedPaymentMethodId && selectedPaymentMethodId !== current.paymentMethod?.paymentMethodId) {
       const switchResult = await switchDefaultPaymentMethod(selectedPaymentMethodId);
-      if (!switchResult.success) return { success: false, message: "결제 수단을 변경하지 못했습니다. 다시 시도해주세요." };
+      if (!switchResult.success) return { success: false, message: "결제 수단을 바꾸지 못했어요. 다시 시도해 주세요." };
       commitDefaultPaymentMethod(selectedPaymentMethodId);
     }
 
     const chargeResult = await chargeFirstPaymentWithTossPayments(plan);
     if (chargeResult.status === "cancelled") return { success: false };
-    if (chargeResult.status === "failure") return { success: false, message: "결제에 실패했습니다. 다시 시도해주세요." };
+    if (chargeResult.status === "failure") return { success: false, message: "결제하지 못했어요. 다시 시도해 주세요." };
 
     subscribeToPlan(planId);
     setConfirmIntent(null);
@@ -103,11 +103,11 @@ export function PricingPage({
   const handleConfirmTopup = async (pkg: CreditPackage, selectedPaymentMethodId?: string): Promise<PurchaseConfirmResult> => {
     const chargeResult = await chargeTopupWithTossPayments(pkg, selectedPaymentMethodId);
     if (chargeResult.status === "cancelled") return { success: false };
-    if (chargeResult.status === "failure") return { success: false, message: "결제에 실패했습니다. 다시 시도해주세요." };
+    if (chargeResult.status === "failure") return { success: false, message: "결제하지 못했어요. 다시 시도해 주세요." };
 
     addTopup(pkg);
     setConfirmIntent(null);
-    showToast("크레딧이 충전되었습니다");
+    showToast("크레딧을 충전했어요.");
     return { success: true };
   };
 

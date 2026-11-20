@@ -19,7 +19,7 @@ function SectionHead({ title, desc }: { title: string; desc?: string }) {
 export function SettingsBillingTab({ onChangePlan }: { onChangePlan: () => void }) {
   return (
     <div className="flex flex-col gap-5">
-      <SectionHead title="구독 및 결제" desc="현재 이용 중인 플랜과 결제 정보를 관리할 수 있습니다." />
+      <SectionHead title="구독 및 결제" desc="지금 이용 중인 플랜과 결제 정보를 관리할 수 있어요." />
       <SubscriptionBillingTab onChangePlan={onChangePlan} />
     </div>
   );

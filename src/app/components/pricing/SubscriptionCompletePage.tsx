@@ -31,7 +31,7 @@ export function SubscriptionCompletePage({
         <div>
           <h1 style={typography.pageTitle}>{isPlanChange ? "요금제가 변경되었어요" : "구독이 시작되었어요"}</h1>
           <p style={{ ...f, fontWeight: 400, fontSize: 13.5, color: color.text.secondary, marginTop: 6, lineHeight: 1.6 }}>
-            {isPlanChange ? `${plan.name} 플랜으로 변경되었습니다.` : `${plan.name} 플랜을 이용할 수 있습니다.`}
+            {isPlanChange ? `${plan.name} 플랜으로 바꿨어요.` : `이제 ${plan.name} 플랜을 쓸 수 있어요.`}
           </p>
         </div>
 

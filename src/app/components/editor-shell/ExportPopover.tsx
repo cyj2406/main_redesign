@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Download } from "lucide-react";
+import { Check, ChevronDown, Download, X } from "lucide-react";
 
 import { color, editorType, f } from "@/app/styleTokens";
 
 /**
- * 내보내기 팝오버(에디터 공통, 2026-11-19) — 상단 [내보내기]를 누르면 바로 아래에 열린다. 첫 적용: 영상 편집기.
- * dev 영상 편집기 "프로젝트 내보내기"(형식 · 품질 · 오디오 → [내보내기]) 구성을 딸깍 스타일(14/12 글자 · 40px 칸 · 브랜드 버튼)로.
- * 묶음은 접을 수 있고(▾), 고른 값은 머리 오른쪽에 요약으로 보인다. 서버 없음: [내보내기]는 고른 설정을 넘겨 주기만 한다.
+ * 내보내기(다운로드) 팝오버(에디터 공통) — 상단 [다운로드]를 누르면 바로 아래에 열린다. 이미지 · 영상.
+ * 2026-11-20 dev 다운로드 창 모양으로 되돌림(사용자 "이미지 다운로드 왜 변함"): 라디오 목록 대신
+ *  [제목 ✕] → 항목마다 [이름 + 드롭다운 칸] → "다운로드 정보 · PNG · 1배 · 모든 페이지" 요약 → [다운로드].
+ * 고른 값의 설명(hint)은 칸 아래 작은 글자로. 켜고 끄는 항목(check)은 체크 상자 한 줄. 서버 없음: 고른 설정을 넘겨 주기만 한다.
  */
 export interface ExportGroup {
   id: string;
@@ -18,8 +19,10 @@ export interface ExportGroup {
 }
 export type ExportChoice = Record<string, string | boolean>;
 
-export function ExportPopover({ title = "내보내기", groups, accent = color.brand, onExport, onClose }: {
+export function ExportPopover({ title = "내보내기", actionLabel = "내보내기", groups, accent = color.brand, onExport, onClose }: {
   title?: string;
+  /** 아래 버튼 글자(이미지는 "다운로드") */
+  actionLabel?: string;
   groups: ExportGroup[];
   accent?: string;
   onExport: (choice: ExportChoice) => void;
@@ -27,7 +30,6 @@ export function ExportPopover({ title = "내보내기", groups, accent = color.b
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [choice, setChoice] = useState<ExportChoice>(() => Object.fromEntries(groups.map((g) => [g.id, g.default])));
-  const [folded, setFolded] = useState<Record<string, boolean>>({});
   useEffect(() => {
     const down = (e: PointerEvent) => { if (!ref.current?.parentElement?.contains(e.target as Node)) onClose(); };
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -35,52 +37,45 @@ export function ExportPopover({ title = "내보내기", groups, accent = color.b
     document.addEventListener("keydown", key);
     return () => { document.removeEventListener("pointerdown", down); document.removeEventListener("keydown", key); };
   }, [onClose]);
-  const summary = (g: ExportGroup) => g.type === "check" ? (choice[g.id] ? "포함" : "빼기") : g.options.find((o) => o.id === choice[g.id])?.label ?? "";
+  const valueLabel = (g: ExportGroup) => g.type === "check" ? (choice[g.id] ? g.options[0]?.label : `${g.label} 빼기`) : g.options.find((o) => o.id === choice[g.id])?.label ?? "";
 
   return (
-    <div ref={ref} className="absolute right-0 top-12 z-50 bg-white rounded-xl overflow-hidden" style={{ ...f, width: 340, boxShadow: "0px 8px 32px rgba(0,0,0,0.14)", border: "1px solid #e5e7eb" }} role="dialog" aria-label={title}>
-      <p style={{ fontSize: editorType.large, fontWeight: 700, color: "#111827", padding: "16px 16px 12px" }}>{title}</p>
-      {groups.map((g) => {
-        const open = !folded[g.id];
-        return (
-          <section key={g.id} style={{ borderTop: "1px solid #eef0f3" }}>
-            <button type="button" aria-expanded={open} onClick={() => setFolded((o) => ({ ...o, [g.id]: open }))} className="w-full h-12 px-4 flex items-center gap-2 text-left hover:bg-[#f8fafc] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4f7bff]">
-              <span style={{ fontSize: editorType.body, fontWeight: 700, color: "#111827" }}>{g.label}</span>
-              {!open && <span className="truncate" style={{ fontSize: editorType.caption, color: "#64748b" }}>{summary(g)}</span>}
-              <ChevronDown size={16} color="#64748b" className="ml-auto shrink-0 transition-transform" style={{ transform: open ? undefined : "rotate(-90deg)" }} />
-            </button>
-            {open && (
-              <div className="px-2 pb-2" role={g.type === "radio" ? "radiogroup" : "group"} aria-label={g.label}>
-                {g.options.map((o) => {
-                  const on = g.type === "radio" ? choice[g.id] === o.id : !!choice[g.id];
-                  return (
-                    <button
-                      key={o.id} type="button" role={g.type === "radio" ? "radio" : "checkbox"} aria-checked={on}
-                      onClick={() => setChoice((c) => ({ ...c, [g.id]: g.type === "radio" ? o.id : !c[g.id] }))}
-                      className="w-full min-h-10 px-2 py-2 flex items-center gap-3 rounded-lg text-left hover:bg-[#f8fafc] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
-                    >
-                      {g.type === "radio" ? (
-                        <span className="size-5 shrink-0 rounded-full flex items-center justify-center" style={{ boxShadow: `inset 0 0 0 ${on ? 6 : 1.5}px ${on ? accent : "#cbd5e1"}` }} />
-                      ) : (
-                        <span className="size-5 shrink-0 rounded-md flex items-center justify-center" style={{ background: on ? accent : "#fff", boxShadow: on ? undefined : "inset 0 0 0 1.5px #cbd5e1" }}>{on && <Check size={14} color="#fff" strokeWidth={3} />}</span>
-                      )}
-                      <span className="min-w-0 flex-1">
-                        <span style={{ fontSize: editorType.body, fontWeight: on ? 600 : 500, color: "#111827" }}>{o.label}</span>
-                        {o.hint && <span style={{ fontSize: editorType.caption, color: "#64748b", marginLeft: 6 }}>{o.hint}</span>}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        );
-      })}
-      <div className="p-4" style={{ borderTop: "1px solid #eef0f3" }}>
-        <button type="button" onClick={() => onExport(choice)} className="w-full h-10 rounded-lg flex items-center justify-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#4f7bff] hover:brightness-95" style={{ background: accent, color: "#fff", fontSize: editorType.body, fontWeight: 600 }}>
-          <Download size={18} />내보내기
-        </button>
+    <div ref={ref} className="absolute right-0 top-12 z-50 bg-white rounded-2xl" style={{ ...f, width: 320, padding: "20px 20px 20px", boxShadow: "0px 8px 32px rgba(0,0,0,0.14)", border: "1px solid #e5e7eb" }} role="dialog" aria-label={title}>
+      <div className="flex items-center">
+        <p style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>{title}</p>
+        <button type="button" aria-label="닫기" onClick={onClose} className="ml-auto -mr-1.5 size-8 rounded-lg flex items-center justify-center hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]"><X size={18} color="#475569" /></button>
       </div>
+      <div className="flex flex-col gap-4 mt-4">
+        {groups.map((g) => {
+          if (g.type === "check") {
+            const on = !!choice[g.id];
+            return (
+              <button key={g.id} type="button" role="checkbox" aria-checked={on} onClick={() => setChoice((c) => ({ ...c, [g.id]: !c[g.id] }))} className="flex items-center gap-2.5 text-left rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]">
+                <span className="size-5 shrink-0 rounded-md flex items-center justify-center" style={{ background: on ? accent : "#fff", boxShadow: on ? undefined : "inset 0 0 0 1.5px #cbd5e1" }}>{on && <Check size={14} color="#fff" strokeWidth={3} />}</span>
+                <span style={{ fontSize: editorType.body, fontWeight: 500, color: "#111827" }}>{g.options[0]?.label ?? g.label}</span>
+              </button>
+            );
+          }
+          const hint = g.options.find((o) => o.id === choice[g.id])?.hint;
+          return (
+            <label key={g.id} className="block">
+              <span className="block" style={{ fontSize: editorType.label, fontWeight: 600, color: "#334155", marginBottom: 8 }}>{g.label}</span>
+              <span className="relative block">
+                <select value={String(choice[g.id])} onChange={(e) => setChoice((c) => ({ ...c, [g.id]: e.target.value }))}
+                  className="w-full h-11 pl-3.5 pr-9 rounded-xl bg-white appearance-none cursor-pointer outline-none border border-[#e2e8f0]" style={{ fontSize: editorType.body, color: "#111827" }}>
+                  {g.options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                </select>
+                <ChevronDown size={16} color="#64748b" className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </span>
+              {hint && <span className="block" style={{ fontSize: editorType.caption, color: "#64748b", marginTop: 6 }}>{hint}</span>}
+            </label>
+          );
+        })}
+      </div>
+      <p className="truncate" style={{ fontSize: editorType.caption, color: "#94a3b8", marginTop: 16 }}>{actionLabel} 정보 · {groups.map(valueLabel).join(" · ")}</p>
+      <button type="button" onClick={() => onExport(choice)} className="mt-3 w-full h-12 rounded-xl flex items-center justify-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#4f7bff] hover:brightness-95" style={{ background: accent, color: "#fff", fontSize: editorType.body, fontWeight: 700 }}>
+        <Download size={18} />{actionLabel}
+      </button>
     </div>
   );
 }

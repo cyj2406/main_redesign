@@ -1,111 +1,148 @@
 import { useState, type ReactNode } from "react";
-import { BookmarkPlus, History, RotateCcw, Sparkles, X } from "lucide-react";
+import { Bookmark, History, X } from "lucide-react";
 
-import { ProfileAvatar } from "@/app/components/mypage/ProfileAvatar";
-import { IconTooltip } from "@/app/components/viewer/IconTooltip";
 import { color, f, editorType } from "@/app/styleTokens";
 
-import type { CommentAuthor } from "./comments";
 import { PanelCloseButton } from "./SideDock";
 
 /**
- * 버전 기록 패널(에디터 공통, 2026-11-19) — 상단 바 🕘로 여는 오른쪽 패널. 기획: docs/editor-common-header.md "9".
- * "대화 목록"(딸깍 AI와 나눈 대화)과는 다른 기능: 여기는 **파일 자체의 이전 상태**를 보고 되돌린다.
- * 2026-11-19 가볍게(피드백 "UI 너무 거창해"): Figma·Google Docs 버전 기록처럼 촘촘한 목록 하나.
- *   - 이름 붙이기는 머리의 작은 아이콘(큰 점선 버튼 없앰) · 고른 버전 아래 작은 미리 보기 + 작은 [되돌리기] 텍스트 버튼(큰 파란 버튼·안내 문구 없앰)
+ * 버전 기록 패널(에디터 공통) — 상단 바 🕘로 여는 오른쪽 패널. 기획: docs/editor-common-header.md "24".
+ * "대화 목록"(딸깍 AI와 나눈 대화)과는 다른 기능: 여기는 **파일 자체의 지난 상태**를 보고 되돌린다.
+ *
+ * 2026-11-20 다시 설계(사용자 "기록이 너무 헷갈린다, 이름도 밑에 정보도 뭐가 뭔지 모르겠다, 공유하면 누구 기록인지"):
+ *  Google 문서 · Figma · Notion 버전 기록과 Genspark Save Point 참고.
+ *  - 줄 하나 = 그때 파일 상태 하나. 제목은 **그 상태를 만든 일**(“AI 요청 문장” · ○○ 템플릿으로 시작 · 오후 2:19 버전으로 되돌림 · 직접 고침).
+ *    예전처럼 "직전 상태" · "되돌리기 전 상태" 같은 말은 쓰지 않는다
+ *  - 둘째 줄 = 누가 · 언제(최유정 · 오후 2:19 / 딸깍 AI · 오후 2:20). "나" · "방금" 대신 이름과 시각
+ *  - 지금 상태인 줄에 현재 뱃지. 따로 "현재 버전" 줄을 두지 않는다
+ *  - 되돌리기는 줄을 새로 만들지 않는다(사용자 "되돌림도 꼭 기록해야 하나, 헷갈린다"): 고른 줄로 현재 뱃지가 옮겨 가고,
+ *    그 뒤에 고치면 맨 위에 새 줄이 생긴다. 위에 있던 줄은 그대로 남아 언제든 다시 돌아갈 수 있다
+ *  - 남기기: 원래 딸깍넷 편집기 기록 창에 있던 기능. [현재] 줄을 누르면 [이름 붙여 남기기] → 이름(안 적어도 됨) → 그 줄에 "남긴 버전" 뱃지.
+ *    [전체 · 남긴 버전] 탭은 다시 넣지 않는다(사용자 "최대한 심플한 플로우")
+ *  - 파일 하나의 기록이라 함께 편집하는 사람 모두의 기록이 같이 쌓인다(Google 문서 · Figma와 같음). 되돌려도 아무 줄도 지우지 않는다
  */
 export interface VersionItem {
   id: string;
-  /** 이름 붙인 버전이면 그 이름, 아니면 "자동 저장" · "딸깍 AI 작업" 같은 종류 */
+  /** 이 상태를 만든 일. AI 요청이면 promptTitle()로 자른 문장 */
   title: string;
   at: number;
-  author: CommentAuthor | "ai";
-  named?: boolean;
+  /** 누가 만든 상태인지(사람 이름 또는 "딸깍 AI") */
+  author: string;
+  /** [지금 상태 남기기]로 남긴 버전 */
+  saved?: boolean;
+  /** 남길 때 붙인 이름(있으면 제목 자리에, 원래 제목은 둘째 줄 앞에) */
+  savedName?: string;
 }
 
-const timeLabel = (ts: number) => {
-  const s = Math.floor((Date.now() - ts) / 1000);
-  if (s < 60) return "방금";
-  if (s < 3600) return `${Math.floor(s / 60)}분 전`;
-  const d = new Date(ts);
-  const hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
-  return s < 86400 ? `오늘 ${hm}` : `${d.getMonth() + 1}월 ${d.getDate()}일 ${hm}`;
+/** AI 요청 문장 → 버전 제목(따옴표 + 26자에서 자르기) */
+export const promptTitle = (prompt: string) => {
+  const t = prompt.replace(/\s+/g, " ").trim();
+  return `“${t.length > 26 ? `${t.slice(0, 26)}…` : t}”`;
 };
 
-export function VersionHistoryPanel({ items, selectedId, onSelect, renderPreview, onRestore, onSaveNamed, onClose }: {
-  /** 최신순 */
+const pad = (n: number) => String(n).padStart(2, "0");
+export const clockLabel = (ts: number) => { const d = new Date(ts); const h = d.getHours(); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${pad(d.getMinutes())}`; };
+const dayLabel = (ts: number) => {
+  const d = new Date(ts); d.setHours(0, 0, 0, 0);
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const diff = Math.round((t.getTime() - d.getTime()) / 864e5);
+  return diff === 0 ? "오늘" : diff === 1 ? "어제" : `${d.getMonth() + 1}월 ${d.getDate()}일`;
+};
+/** 되돌림 제목용: "오늘 오후 2:19" · "11월 18일 오후 2:19" */
+export const whenLabel = (ts: number) => `${dayLabel(ts)} ${clockLabel(ts)}`;
+
+export function VersionHistoryPanel({ items, currentId: currentIdProp, emptyText, selectedId, onSelect, onRestore, onSaveNow, onClose }: {
+  /** 최신순. 첫 줄이 지금 상태 */
   items: VersionItem[];
-  /** null = 현재 버전 */
+  /** 지금 상태인 줄. 없으면 첫 줄(되돌린 뒤에는 아래 줄이 현재가 된다) */
+  currentId?: string;
+  /** 기록이 없을 때 안내 */
+  emptyText?: string;
+  /** null = 아무것도 고르지 않음 */
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  renderPreview: (id: string) => ReactNode;
   onRestore: (id: string) => void;
-  onSaveNamed: (name: string) => void;
+  /** [지금 상태 남기기]. 이름은 비어 있을 수 있다 */
+  onSaveNow: (name: string) => void;
   onClose: () => void;
 }) {
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
-  const save = () => { const n = name.trim(); if (!n) return; onSaveNamed(n); setName(""); setNaming(false); };
+  const close = () => { setNaming(false); setName(""); };
+  const save = () => { onSaveNow(name.trim()); close(); };
+  const shown = items;
+  const currentId = currentIdProp ?? items[0]?.id;
+  const groups: { day: string; list: VersionItem[] }[] = [];
+  for (const v of shown) { const day = dayLabel(v.at); const g = groups[groups.length - 1]; if (g && g.day === day) g.list.push(v); else groups.push({ day, list: [v] }); }
+
   return (
     <div className="h-full flex flex-col" style={f}>
-      <div className="flex items-center gap-2 shrink-0" style={{ height: 48, padding: "0 8px 0 8px", borderBottom: "1px solid #eef0f3" }}>
+      {/* 2026-11-20 레이아웃 다시(사용자 "버전 남기기 버튼이 애매하고 글도 애매하게 배치"): 머리 오른쪽 버튼과 위 안내 문구를 뺐다.
+          남기기는 "지금 상태"에 하는 일이라 [현재] 줄을 눌렀을 때 그 줄 안에서 한다. 되돌림 안내는 되돌린 뒤 토스트로 */}
+      <div className="flex items-center gap-2 shrink-0" style={{ height: 48, padding: "0 8px", borderBottom: "1px solid #eef0f3" }}>
         <PanelCloseButton onClick={onClose} />
         <History size={15} color="#111827" />
         <span style={{ fontSize: editorType.large, fontWeight: 700, color: "#111827" }}>버전 기록</span>
-        <IconTooltip label="지금 상태에 이름 붙여 저장"><button type="button" aria-label="지금 상태에 이름 붙여 저장" aria-pressed={naming} onClick={() => setNaming((v) => !v)} className="ml-auto size-8 flex items-center justify-center rounded-md hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ background: naming ? "rgba(0,0,0,0.05)" : undefined }}>
-          <BookmarkPlus size={15} color="#475569" />
-        </button></IconTooltip>
       </div>
 
-      <div className="flex-1 overflow-y-auto ui-scroll py-2">
-        {naming && (
-          <form onSubmit={(e) => { e.preventDefault(); save(); }} className="flex items-center gap-1 mx-2 mb-1 px-2 h-10 rounded-lg" style={{ background: "#f8fafc", border: "1px solid #e5e7eb" }}>
-            <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") { setNaming(false); setName(""); } }} placeholder="버전 이름 (예: 시안 1차)" aria-label="버전 이름"
-              className="flex-1 min-w-0 bg-transparent outline-none" style={{ ...f, fontSize: editorType.body, color: "#111827" }} />
-            <button type="submit" disabled={!name.trim()} className="px-2 h-6 rounded disabled:opacity-40" style={{ fontSize: editorType.label, fontWeight: 700, color: color.brand }}>저장</button>
-            <button type="button" aria-label="취소" onClick={() => { setNaming(false); setName(""); }} className="size-6 flex items-center justify-center rounded hover:bg-black/[0.05]"><X size={12} color="#94a3b8" /></button>
-          </form>
-        )}
-
-        <Row selected={selectedId === null} onClick={() => onSelect(null)} title="현재 버전" sub="지금 보고 있는 상태" />
-        {items.length === 0 ? (
-          <p style={{ fontSize: editorType.caption, lineHeight: "17px", color: "#94a3b8", padding: "12px 16px", wordBreak: "keep-all" }}>
-            파일을 고치면 자동으로 저장되고, 그다음부터 이전 버전이 남아요.
+      <div className="flex-1 overflow-y-auto ui-scroll" style={{ padding: "4px 12px 12px" }}>
+        {shown.length === 0 && (
+          <p style={{ fontSize: editorType.caption, lineHeight: "18px", color: "#64748b", padding: "12px 12px", wordBreak: "keep-all" }}>
+            {emptyText ?? "템플릿을 넣거나 딸깍 AI가 고치면 그때마다 여기에 남아요."}
           </p>
-        ) : items.map((v) => {
-          const sel = selectedId === v.id;
-          return (
-            <div key={v.id}>
-              <Row
-                selected={sel} onClick={() => onSelect(sel ? null : v.id)}
-                title={v.title} named={v.named}
-                sub={`${timeLabel(v.at)} · ${v.author === "ai" ? "딸깍 AI" : v.author.name}`}
-                avatar={v.author === "ai" ? <Sparkles size={12} color={color.brand} /> : <ProfileAvatar profile={v.author} size={16} />}
-              />
-              {sel && (
-                <div className="mx-3 mb-2 mt-0.5">
-                  <div className="rounded-md overflow-hidden" style={{ border: "1px solid #eef0f3" }}>{renderPreview(v.id)}</div>
-                  <button type="button" onClick={() => onRestore(v.id)} title="되돌리기 전 상태도 버전으로 남아요" className="mt-1 inline-flex items-center gap-1 h-8 px-2 -ml-2 rounded-md hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ fontSize: editorType.label, fontWeight: 600, color: color.brand }}>
-                    <RotateCcw size={12} />이 버전으로 되돌리기
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
+        )}
+        {groups.map((g) => (
+          <section key={g.day} aria-label={g.day}>
+            <p style={{ fontSize: editorType.caption, fontWeight: 600, color: "#64748b", padding: "16px 12px 4px" }}>{g.day}</p>
+            {g.list.map((v) => {
+              const isCurrent = v.id === currentId;
+              const sel = selectedId === v.id;
+              return (
+                <Row key={v.id} selected={sel} onClick={() => { close(); onSelect(sel ? null : v.id); }}
+                  head={v.savedName || v.title}
+                  badges={<>{isCurrent && <Badge tone="brand">현재</Badge>}{v.saved && <Badge>남긴 버전</Badge>}</>}
+                  desc={`${v.savedName ? `${v.title} · ` : ""}${v.author} · ${clockLabel(v.at)}`}>
+                  {sel && (isCurrent ? (naming ? (
+                    <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); save(); }} className="mt-2 flex items-center gap-1 h-9 pl-2.5 pr-1 rounded-lg bg-white" style={{ boxShadow: `inset 0 0 0 1px ${color.border.focus}` }}>
+                      <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") close(); }}
+                        placeholder="버전 이름 (안 적어도 돼요)" aria-label="버전 이름" className="field-inline flex-1 min-w-0 bg-transparent outline-none" style={{ ...f, fontSize: editorType.body, color: "#111827" }} />
+                      <button type="submit" className="h-7 px-2.5 rounded-md" style={{ background: color.brand, color: "#fff", fontSize: editorType.label, fontWeight: 700 }}>남기기</button>
+                      <button type="button" aria-label="취소" onClick={close} className="size-7 flex items-center justify-center rounded-md hover:bg-black/[0.05]"><X size={14} color="#64748b" /></button>
+                    </form>
+                  ) : (
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setNaming(true); }} className="mt-1 h-7 rounded inline-flex items-center gap-1 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ fontSize: editorType.label, fontWeight: 600, color: color.brand }}>
+                      <Bookmark size={13} />{v.saved ? "이름 바꿔 남기기" : "이름 붙여 남기기"}
+                    </button>
+                  )) : (
+                    <button type="button" onClick={(e) => { e.stopPropagation(); onRestore(v.id); }} title="다른 버전은 그대로 남아서 언제든 다시 돌아올 수 있어요" className="mt-1 h-7 rounded outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ fontSize: editorType.label, fontWeight: 600, color: color.brand }}>
+                      이 버전으로 되돌리기
+                    </button>
+                  ))}
+                </Row>
+              );
+            })}
+          </section>
+        ))}
       </div>
     </div>
   );
 }
 
-function Row({ selected, onClick, title, sub, avatar, named }: { selected: boolean; onClick: () => void; title: string; sub: string; avatar?: ReactNode; named?: boolean }) {
+function Badge({ children, tone }: { children: ReactNode; tone?: "brand" }) {
+  return <span className="shrink-0 h-5 px-1.5 rounded inline-flex items-center" style={{ fontSize: 11, fontWeight: 700, color: tone === "brand" ? color.brand : "#475569", background: tone === "brand" ? "#eef3ff" : "#f1f5f9" }}>{children}</span>;
+}
+
+function Row({ selected, onClick, head, badges, desc, children }: { selected: boolean; onClick: () => void; head: string; badges?: ReactNode; desc?: string; children?: ReactNode }) {
   return (
-    <button type="button" aria-pressed={selected} onClick={onClick} className="w-full flex items-start gap-2 text-left px-3 py-2 hover:bg-[#f8fafc] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4f7bff]" style={{ background: selected ? "#f1f5f9" : undefined }}>
-      <span className="shrink-0 size-4 mt-0.5 flex items-center justify-center">{avatar ?? <span className="size-1.5 rounded-full" style={{ background: selected ? color.brand : "#94a3b8" }} />}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate" style={{ fontSize: editorType.body, fontWeight: named ? 700 : 500, color: "#111827" }}>{title}</span>
-        <span className="block truncate" style={{ fontSize: editorType.caption, color: "#94a3b8" }}>{sub}</span>
-      </span>
-    </button>
+    <div role="button" tabIndex={0} aria-pressed={selected} onClick={onClick} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+      className="rounded-lg cursor-pointer hover:bg-[#f8fafc] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
+      style={{ padding: "8px 12px", background: selected ? "#f1f5f9" : undefined }}>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <p className="truncate" title={head} style={{ fontSize: editorType.body, fontWeight: 600, color: "#111827" }}>{head}</p>
+        {badges}
+      </div>
+      {desc && <p className="truncate" title={desc} style={{ fontSize: editorType.caption, lineHeight: "18px", color: "#64748b", marginTop: 1 }}>{desc}</p>}
+      {children}
+    </div>
   );
 }

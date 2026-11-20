@@ -85,7 +85,7 @@ export function TopUpTab({ onConfirmPurchase }: { onConfirmPurchase: (pkg: Credi
 
           <div className="flex flex-col gap-4">
             <div className="h-px bg-[#f1f5f9]" />
-            <p style={{ ...typography.caption, lineHeight: 1.5 }}>월 구독과 별도로 구매하는 일회성 충전입니다.</p>
+            <p style={{ ...typography.caption, lineHeight: 1.5 }}>월 구독과 따로 한 번만 사는 충전이에요.</p>
             <Button variant="primary" size="lg" fullWidth onClick={() => onConfirmPurchase(pkg)}>
               {pkg.price} 충전하기
             </Button>

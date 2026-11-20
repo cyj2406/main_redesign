@@ -38,7 +38,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     // 적은 내용에 맞는 템플릿·서식을 찾아 보여 주는 동작 — '만들어 준다'로 읽히지 않게, '검색'이라는 말 없이.
     // 예시는 입력칸 placeholder 가 타이핑으로 보여 주므로 본문에는 따로 들지 않는다.
     title: "한 줄이면 찾아드려요",
-    body: "보고서·카드뉴스·홍보 이미지까지, 적은 대로 바로 고쳐 쓸 수 있는 걸 보여드려요.",
+    body: "보고서, 카드뉴스, 홍보 이미지까지, 적은 대로 바로 고쳐 쓸 수 있는 걸 보여드려요.",
     scroll: "center",
     placement: "bottom",
   },
@@ -47,7 +47,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     target: sel("editor-row"),
     // 2026-11-13 라벨에서 '무료'를 빼면서(→ '편집기 바로 열기') 배지 강조와 무료 문구도 뺐다
     title: "편집기를 바로 써 보세요",
-    body: "한글·워드·PPT·PDF부터 디자인·영상까지, 설치 없이 웹에서 열어 편집해요.",
+    body: "한글, 워드, PPT, PDF부터 디자인과 영상까지, 설치 없이 웹에서 열어 편집해요.",
     scroll: "center",
     placement: "bottom",
   },

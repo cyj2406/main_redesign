@@ -989,7 +989,7 @@ export default function RequestHelpScreen({
                   id="req-content"
                   value={draft.content}
                   onChange={(v) => setDraft((d) => ({ ...d, content: v }))}
-                  placeholder="핵심 내용과 반드시 들어가야 할 이름·날짜·숫자 등을 적어주세요."
+                  placeholder="핵심 내용과 꼭 들어가야 할 이름, 날짜, 숫자를 적어 주세요."
                   placeholderStyle={PLACEHOLDER_STYLE}
                   style={{
                     ...TEXT_BOX_STYLE, border: "1px solid #e2e8f0",

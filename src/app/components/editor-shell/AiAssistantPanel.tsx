@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Bell, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, FileText, Frame, FolderOpen, Image as ImageIcon, MessagesSquare, Loader2, MessageSquarePlus, Plus, Scan, Sparkles, Square, Trash2, Upload, X, Zap, ListChecks, Crosshair, Undo2, BookOpen, Paperclip, FolderPlus } from "lucide-react";
+import { ArrowRight, ArrowUp, Bell, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, FileText, Frame, FolderOpen, Image as ImageIcon, MessagesSquare, Loader2, MessageSquarePlus, Plus, Scan, Sparkles, Square, Trash2, Upload, X, Zap, ListChecks, Crosshair, Copy, BookOpen, Paperclip, FolderPlus } from "lucide-react";
 
 import { showToast } from "@/app/components/common/Toast";
 import { TIERS, isOwnKey, modelLabel, ownModels, useAiModels, validModel, type ModelId } from "@/app/state/aiModels";
@@ -80,7 +80,8 @@ export function AiAssistantPanel({
   onShowResult?: (r: AiResult) => void;
   onUndoResult?: (r: AiResult) => void;
   /** 작업이 끝났을 때(도크가 접혀 있으면 탭에 점을 붙이는 데 쓴다) */
-  onFinished?: () => void;
+  /** 끝난 요청 문장(버전 기록 제목으로 쓴다) */
+  onFinished?: (prompt: string) => void;
   /** 머리 왼쪽 » 접기 버튼 — 도크가 넘긴다 */
   onClose?: () => void;
   closeShortcut?: string;
@@ -109,7 +110,7 @@ export function AiAssistantPanel({
   const model = validModel(modelRaw, models);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [running, setRunning] = useState(false);
-  const [menu, setMenu] = useState<null | "plus" | "mode" | "model" | "history" | "projectPick">(null);
+  const [menu, setMenu] = useState<null | "plus" | "mode" | "model" | "history">(null);
   const [projectOpen, setProjectOpen] = useState(false);
   const [instructions, setInstructions] = useState("");
   const [projectFiles, setProjectFiles] = useState<(AiAttachment & { at: number })[]>([]);
@@ -129,6 +130,8 @@ export function AiAssistantPanel({
   }, [prefill?.key]); // eslint-disable-line react-hooks/exhaustive-deps
   const [briefForced, setBriefForced] = useState<number | null>(null);
   useEffect(() => { if (briefOpen) setBriefForced(briefOpen.key); }, [briefOpen?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 폼이 펼쳐져 있는지(2026-11-20): 펼치면 첫 화면 안내 · 예시를 숨기고 폼만 보인다
+  const [briefShown, setBriefShown] = useState(false);
   useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" }); }, [msgs]);
   useEffect(() => {
     if (!menu) return;
@@ -148,7 +151,7 @@ export function AiAssistantPanel({
     patch(() => ({ status: result.stopped ? "stopped" : "done", result }));
     if (!result.clarify) setConvs((all) => all.map((c) => (c.id === convId && !c.titled ? { ...c, title: req.prompt.slice(0, 24), titled: true } : c)));
     setRunning(false);
-    onFinished?.();
+    onFinished?.(req.prompt);
   };
 
   const start = (req: AiRequest) => {
@@ -188,11 +191,12 @@ export function AiAssistantPanel({
     cancelRef.current = true;
   };
 
+  const [dropping, setDropping] = useState(false);
   const addFiles = (files: FileList | null) => {
     if (!files) return;
     const list = Array.from(files);
     const tooBig = list.filter((x) => x.size > MAX_FILE);
-    if (tooBig.length) showToast(`20MB가 넘는 파일은 올릴 수 없어요: ${tooBig[0].name}`, "error");
+    if (tooBig.length) showToast(`${tooBig[0].name} 파일은 20MB가 넘어서 올릴 수 없어요.`, "error");
     const ok = list.filter((x) => x.size <= MAX_FILE);
     setAttachments((a) => {
       const room = MAX_ATTACH - a.length;
@@ -206,7 +210,7 @@ export function AiAssistantPanel({
     let room = PROJECT_LIMIT - used;
     const added: (AiAttachment & { at: number })[] = [];
     for (const file of Array.from(files)) {
-      if (file.size > room) { showToast("프로젝트 용량(100MB)을 넘어요.", "error"); break; }
+      if (file.size > room) { showToast("프로젝트 용량 100MB를 넘어서 올릴 수 없어요.", "error"); break; }
       room -= file.size;
       added.push({ ...toAttachment(file), at: Date.now() });
     }
@@ -226,8 +230,21 @@ export function AiAssistantPanel({
   const menuStyle = { boxShadow: "0px 8px 32px rgba(0,0,0,0.14)", border: "1px solid #e5e7eb" } as const;
   const menuItem = "w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[#f8fafc] disabled:opacity-40 disabled:hover:bg-transparent";
 
+  // 파일 끌어다 놓기(2026-11-20): ＋ > 파일 올리기와 같다(이번 요청에만 붙임). 패널 어디에 놓아도 된다
+  const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes("Files");
   return (
-    <div className="relative flex flex-col h-full" style={f}>
+    <div className="relative flex flex-col h-full" style={f}
+      onDragEnter={(e) => { if (hasFiles(e)) { e.preventDefault(); setDropping(true); } }}
+      onDragOver={(e) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropping(false); }}
+      onDrop={(e) => { if (hasFiles(e)) { e.preventDefault(); setDropping(false); addFiles(e.dataTransfer.files); } }}>
+      {dropping && (
+        <div className="absolute inset-2 z-40 rounded-xl flex flex-col items-center justify-center gap-2 pointer-events-none" style={{ background: "rgba(238,243,255,0.92)", border: `2px dashed ${color.brand}` }}>
+          <Paperclip size={22} color={color.brand} />
+          <p style={{ fontSize: editorType.body, fontWeight: 700, color: "#111827" }}>여기에 놓으면 첨부돼요</p>
+          <p style={{ fontSize: editorType.caption, color: "#64748b" }}>이번 요청에만 붙여요. 파일당 20MB까지예요.</p>
+        </div>
+      )}
       {/* 머리 — 대화 제목 · 새 대화(대화 중일 때만) */}
       <div className="relative flex items-center gap-1 shrink-0" style={{ height: 48, padding: onClose ? "0 8px 0 6px" : "0 8px 0 14px", borderBottom: "1px solid #eef0f3" }} data-ai-menu>
         {onClose && <PanelCloseButton onClick={onClose} shortcut={closeShortcut} />}
@@ -244,17 +261,32 @@ export function AiAssistantPanel({
       <div ref={listRef} className="flex-1 overflow-y-auto ui-scroll" style={{ padding: "12px 16px 16px" }}>
         {msgs.length === 0 ? (
           <div>
-            <p style={{ fontSize: editorType.large, lineHeight: "22px", color: "#4b5563", wordBreak: "keep-all" }}>하고 싶은 작업을 말로 적어 주세요. 예: {example}</p>
-            <span className="inline-block mt-2 rounded px-2 py-0.5" style={{ fontSize: editorType.caption, color: "#6b7280", background: "#f3f4f6" }}>사용할 수 있는 명령 {commandCount}개</span>
-            {brief && <BriefCard key={`${brief.key ?? "b"}-${briefForced ?? 0}`} brief={brief} defaultOpen={briefForced !== null} onSend={(text) => { setBriefForced(null); send(text); }} onClose={() => setBriefForced(null)} />}
-            <Suggestions items={suggestions} onPick={(s) => send(s)} />
+            {/* 빈 화면(2026-11-20, 사용자 "사용자 친화적으로"): Canva AI · ChatGPT · Claude 첫 화면처럼 인사 한 줄 + 할 수 있는 일 한 줄 + 바로 누를 예시.
+                예전 "예: “390×844 모바일 홈 화면 프레임…”"(기술 용어)와 "사용할 수 있는 명령 634개"(뜻 없는 숫자)는 AI를 잘 모르는 사람에게 부담이라 뺐다. */}
+            {/* 2026-11-20 사용자 "자세히 적어서 요청하기를 누르면 너무 쌓인다": 폼을 펼치면 인사 · 설명 · 예시를 숨기고 폼이 맨 위에(상자 없이) 온다. 닫으면 다시 보인다 */}
+            {/* 2026-11-20 사용자 "기존처럼 이런 식이 낫다": 인사형("무엇을 도와드릴까요?")에서 예전 구성으로 되돌림. 예시 문장 + 명령 개수 + 자세히 적어서 요청하기 + 예시 칩 */}
+            {!briefShown && (<>
+              <p style={{ fontSize: editorType.large, lineHeight: "22px", color: "#4b5563", wordBreak: "keep-all" }}>하고 싶은 작업을 말로 적어 주세요. 예: {example}</p>
+              <span className="inline-block mt-2 rounded px-2 py-0.5" style={{ fontSize: editorType.caption, color: "#6b7280", background: "#f3f4f6" }}>사용할 수 있는 명령 {commandCount}개</span>
+            </>)}
+            {brief && <BriefCard key={`${brief.key ?? "b"}-${briefForced ?? 0}`} brief={brief} bare defaultOpen={briefForced !== null} onOpenChange={setBriefShown} onSend={(text) => { setBriefForced(null); send(text); }} onClose={() => setBriefForced(null)} />}
+            {!briefShown && <Suggestions items={suggestions} onPick={(s) => send(s)} />}
           </div>
         ) : (
           <div className="flex flex-col gap-4">
             {msgs.map((m, mi) => m.role === "user" ? (
-              <div key={m.id} className="self-end max-w-[88%] flex flex-col items-end gap-1">
+              <div key={m.id} className="group self-end max-w-[88%] flex flex-col items-end gap-1">
                 {m.attachments.length > 0 && <div className="flex flex-wrap justify-end gap-1">{m.attachments.map((a) => <AttachChip key={a.id} a={a} />)}</div>}
                 <div className="rounded-xl px-3 py-2" style={{ background: "#f1f5f9", fontSize: editorType.chat, lineHeight: "24px", color: "#111827", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.text}</div>
+                {/* 내가 쓴 요청 복사(2026-11-20 사용자 "내가 친 거 복사할 수 있게"). 올렸을 때 · 키보드로 갔을 때만 보인다 */}
+                {m.text && (
+                  <IconTooltip label="복사" side="bottom">
+                    <button type="button" aria-label="요청 복사" onClick={() => { void navigator.clipboard?.writeText(m.text).then(() => showToast("요청을 복사했어요."), () => showToast("복사하지 못했어요.")); }}
+                      className="size-7 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff] transition-opacity">
+                      <Copy size={14} color="#64748b" />
+                    </button>
+                  </IconTooltip>
+                )}
               </div>
             ) : (
               <AiTurn
@@ -262,7 +294,7 @@ export function AiAssistantPanel({
                 isLatest={!msgs.slice(mi + 1).some((x) => x.role === "ai")}
                 onRunPlan={() => void execute(m.id, { ...m.req, mode: "auto" }, cur)}
                 onCancelPlan={() => setMsgs((all) => all.map((x) => (x.id === m.id && x.role === "ai" ? { ...x, status: "cancelled" } : x)))}
-                onShow={onShowResult} onUndo={onUndoResult}
+                onShow={onShowResult}
               />
             ))}
             {brief && msgs.length > 0 && briefForced !== null && <BriefCard key={`${brief.key ?? "b"}-${briefForced}`} brief={brief} defaultOpen onSend={(text) => { setBriefForced(null); send(text); }} onClose={() => setBriefForced(null)} />}
@@ -281,7 +313,7 @@ export function AiAssistantPanel({
           />
         )}
         {/* 포커스는 바깥 상자 테두리로만 — 안쪽 입력칸에 전역 포커스 테두리가 겹쳐 그려지지 않게 */}
-        <div className="rounded-2xl bg-white border border-[#e5e7eb] focus-within:border-[#a5b4fc] focus-within:shadow-[0_0_0_3px_rgba(79,123,255,0.12)] transition-shadow" style={{ padding: "8px 12px 8px" }}>
+        <div data-onboarding="ai-composer" className="rounded-2xl bg-white border border-[#e5e7eb] focus-within:border-[#a5b4fc] focus-within:shadow-[0_0_0_3px_rgba(79,123,255,0.12)] transition-shadow" style={{ padding: "8px 12px 8px" }}>
           <div className="flex flex-wrap gap-1 mb-2">
             {context ? (
               <span className="inline-flex items-center gap-1 rounded-md px-2 h-6 max-w-full" style={{ background: color.surface.accent, fontSize: editorType.caption, color: color.brand, fontWeight: 600 }}>
@@ -289,12 +321,14 @@ export function AiAssistantPanel({
                 <button type="button" aria-label="선택 맥락 빼기" onClick={context.onClear} className="shrink-0"><X size={11} /></button>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 rounded-md px-2 h-6" style={{ background: "#f3f4f6", fontSize: editorType.caption, color: "#64748b" }}><Scan size={11} />페이지 전체</span>
+              // 2026-11-20: "페이지 전체"는 AI가 어디를 보는지 알려 주는 표시라 바탕 없이 회색 글자만(누르는 칩과 구분)
+              <span className="inline-flex items-center gap-1 px-1 h-6" style={{ fontSize: editorType.caption, color: "#64748b" }}><Scan size={12} />페이지 전체</span>
             )}
             {projectCount > 0 && (
-              <button type="button" onClick={() => setProjectOpen(true)} className="inline-flex items-center gap-1 rounded-md px-2 h-6" style={{ background: "#f3f4f6", fontSize: editorType.caption, color: "#475569" }}>
-                <FolderOpen size={11} />프로젝트 자료 {projectCount}개 참고 중
-              </button>
+              // 2026-11-20: 누르면 프로젝트 자료 패널이 열리는 버튼임을 보이게 — 끝에 ›, 마우스를 올리면 바탕이 진해지고 툴팁
+              <IconTooltip label="프로젝트 자료 관리" side="top"><button type="button" onClick={() => setProjectOpen(true)} className="inline-flex items-center gap-1 rounded-md pl-2 pr-1 h-6 bg-[#f3f4f6] hover:bg-[#e5e7eb] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ fontSize: editorType.caption, color: "#475569", fontWeight: 500 }}>
+                <FolderOpen size={12} />프로젝트 자료 {projectCount}개 참고 중<ChevronRight size={12} color="#94a3b8" />
+              </button></IconTooltip>
             )}
             {attachments.map((a) => <AttachChip key={a.id} a={a} onRemove={() => setAttachments((l) => l.filter((x) => x.id !== a.id))} />)}
           </div>
@@ -305,7 +339,7 @@ export function AiAssistantPanel({
             onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
             placeholder={running ? (queue.length ? "더 적으면 대기열 뒤에 붙어요" : "다음에 할 일을 적으면 지금 일이 끝난 뒤 보내요") : "무엇을 할까요?"}
             aria-label="딸깍 AI에게 요청"
-            className="w-full resize-none bg-transparent"
+            className="field-inline w-full resize-none bg-transparent"
             style={{ ...f, fontSize: editorType.chat, lineHeight: "24px", color: "#111827", outline: "none", boxShadow: "none" }}
           />
           <div className="relative flex items-center gap-1 mt-0.5" data-ai-menu>
@@ -330,40 +364,24 @@ export function AiAssistantPanel({
               <div className="absolute left-0 bottom-10 z-30 bg-white rounded-xl py-1 w-[264px] max-w-full" style={menuStyle}>
                 {/* ＋ 메뉴(2026-11-19, Claude "파일 추가 / 프로젝트에 추가"·ChatGPT·Gemini 참고): 이번 요청에만 붙일 파일과 이 파일에서 AI가 매번 참고할 프로젝트 파일을 나눈다.
                     이름은 짧게, 차이는 아래 한 줄 설명으로 */}
+                {/* 2026-11-20 정리: "프로젝트" 세 줄(올리기 · 보기 · 고르기)이 헷갈려 두 줄로.
+                    [프로젝트 자료] 자료가 없으면 바로 파일 고르는 창, 있으면 프로젝트 자료 패널(지침 · 파일 목록 · 더 올리기 · 지우기).
+                    "프로젝트 파일에서 고르기"(이번 요청에만 따로 붙이기)는 뺐다: 프로젝트 자료는 원래 매번 다 참고해서 차이가 거의 없다 */}
                 <button type="button" className={menuItem} style={{ alignItems: "flex-start" }} onClick={() => { setMenu(null); fileRef.current?.click(); }}>
                   <Paperclip size={16} color="#475569" className="mt-0.5 shrink-0" />
-                  <span className="min-w-0 flex-1"><span className="block" style={{ fontSize: editorType.body, color: "#111827" }}>파일 올리기</span><span className="block" style={{ fontSize: editorType.caption, color: "#94a3b8" }}>이번 요청에만 붙여요 · 이미지, PDF, .fig</span></span>
+                  <span className="min-w-0 flex-1"><span className="block" style={{ fontSize: editorType.body, color: "#111827" }}>파일 올리기</span><span className="block" style={{ fontSize: editorType.caption, color: "#64748b" }}>이번 요청에만 붙여요. 끌어다 놓아도 돼요</span></span>
                 </button>
-                <button type="button" className={menuItem} style={{ alignItems: "flex-start" }} onClick={() => { setMenu(null); projFileRef.current?.click(); }}>
-                  <FolderPlus size={16} color="#475569" className="mt-0.5 shrink-0" />
-                  <span className="min-w-0 flex-1"><span className="block" style={{ fontSize: editorType.body, color: "#111827" }}>프로젝트 파일 올리기</span><span className="block" style={{ fontSize: editorType.caption, color: "#94a3b8" }}>이 파일에서 AI가 매번 참고해요</span></span>
+                <button type="button" className={menuItem} style={{ alignItems: "flex-start" }} onClick={() => { setMenu(null); if (projectCount > 0) setProjectOpen(true); else projFileRef.current?.click(); }}>
+                  {projectCount > 0 ? <FolderOpen size={16} color="#475569" className="mt-0.5 shrink-0" /> : <FolderPlus size={16} color="#475569" className="mt-0.5 shrink-0" />}
+                  <span className="min-w-0 flex-1"><span className="block" style={{ fontSize: editorType.body, color: "#111827" }}>프로젝트 자료</span><span className="block" style={{ fontSize: editorType.caption, color: "#64748b" }}>이 파일에서 AI가 매번 참고해요</span></span>
+                  {projectCount > 0 && <span className="mt-0.5 shrink-0 inline-flex items-center gap-0.5" style={{ fontSize: editorType.caption, fontWeight: 600, color: "#475569" }}>{projectCount}개<ChevronRight size={12} color="#94a3b8" /></span>}
                 </button>
-                {projectCount > 0 && <button type="button" className={menuItem} onClick={() => { setMenu(null); setProjectOpen(true); }}>
-                  <FolderOpen size={16} color="#475569" className="shrink-0" /><span style={{ fontSize: editorType.body }}>프로젝트 자료 보기</span><span className="ml-auto" style={{ fontSize: editorType.caption, fontWeight: 700, color: color.brand }}>{projectCount}</span>
-                </button>}
-                {projectFiles.length > 0 && <button type="button" className={menuItem} onClick={() => setMenu("projectPick")}>
-                  <FolderOpen size={16} color="#475569" className="shrink-0" /><span style={{ fontSize: editorType.body }}>프로젝트 파일에서 고르기</span><ChevronRight size={12} className="ml-auto" color="#94a3b8" />
-                </button>}
                 {onAttachSelection && context && <button
                   type="button" className={menuItem}
                   onClick={() => { setMenu(null); const a = onAttachSelection?.(); if (a) setAttachments((l) => (l.length >= MAX_ATTACH ? l : [...l, a])); }}
                 >
                   <ImageIcon size={14} color="#475569" /><span style={{ fontSize: editorType.body }}>선택 영역을 이미지로 첨부</span>
                 </button>}
-              </div>
-            )}
-            {menu === "projectPick" && (
-              <div className="absolute left-0 bottom-10 z-30 bg-white rounded-xl py-1 w-[240px] max-w-full max-h-[240px] overflow-y-auto ui-scroll" style={menuStyle}>
-                <p style={{ fontSize: editorType.caption, fontWeight: 600, color: "#64748b", padding: "8px 12px" }}>이번 메시지에 첨부할 프로젝트 파일</p>
-                {projectFiles.map((p) => {
-                  const on = attachments.some((a) => a.id === p.id);
-                  return (
-                    <button key={p.id} type="button" className={menuItem} onClick={() => setAttachments((l) => (on ? l.filter((a) => a.id !== p.id) : l.length >= MAX_ATTACH ? l : [...l, p]))}>
-                      <span className="size-4 rounded flex items-center justify-center shrink-0" style={{ border: "1px solid #cbd5e1", background: on ? color.brand : "#fff" }}>{on && <Check size={11} color="#fff" />}</span>
-                      <span className="truncate" style={{ fontSize: editorType.body }}>{p.name}</span>
-                    </button>
-                  );
-                })}
               </div>
             )}
             {menu === "model" && (
@@ -394,7 +412,7 @@ export function AiAssistantPanel({
                   <>
                     <div className="h-px my-1" style={{ background: "#f1f5f9" }} />
                     <button type="button" className={menuItem} onClick={() => { setMenu(null); onManageModels(); }}>
-                      <span className="flex-1" style={{ fontSize: editorType.label, fontWeight: 600, color: color.brand }}>{ownModels(models).length ? "AI 연결 관리" : "Claude·ChatGPT 연결하기"}</span><ChevronRight size={13} color={color.brand} />
+                      <span className="flex-1" style={{ fontSize: editorType.label, fontWeight: 600, color: color.brand }}>{ownModels(models).length ? "AI 연결 관리" : "Claude, ChatGPT 연결하기"}</span><ChevronRight size={13} color={color.brand} />
                     </button>
                   </>
                 )}
@@ -402,7 +420,7 @@ export function AiAssistantPanel({
             )}
           </div>
         </div>
-        <input ref={fileRef} type="file" multiple accept="image/*,application/pdf,.fig,.figcraft" className="sr-only" tabIndex={-1} onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+        <input ref={fileRef} type="file" multiple className="sr-only" tabIndex={-1} onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
       </div>
 
       {projectOpen && (
@@ -413,84 +431,58 @@ export function AiAssistantPanel({
           onClose={() => setProjectOpen(false)}
         />
       )}
-      <input ref={projFileRef} type="file" multiple accept="image/*,application/pdf,.fig,.figcraft" className="sr-only" tabIndex={-1} onChange={(e) => { const n = e.target.files?.length ?? 0; addProjectFiles(e.target.files); e.target.value = ""; if (n) setProjectOpen(true); }} />
+      <input ref={projFileRef} type="file" multiple className="sr-only" tabIndex={-1} onChange={(e) => { const n = e.target.files?.length ?? 0; addProjectFiles(e.target.files); e.target.value = ""; if (n) setProjectOpen(true); }} />
     </div>
   );
 }
 
 /**
- * 대기열 — 작업 중에 보낸 요청이 순서대로 쌓인다(Claude 대기 메시지처럼). 입력창 바로 위에 붙는 카드 한 장.
- * 카드는 좌우로 넘겨 본다: ‹ › 버튼 · 트랙패드/터치 가로 스와이프(scroll-snap) · 키보드 ←/→. "대기 1/3" 표시.
- * 카드마다 [↑ 바로 보내기](지금 작업을 멈추고 이 요청 먼저) · [✕ 빼기]. 고치기는 두지 않는다(빼고 다시 쓰면 된다).
+ * 대기열 — 작업 중에 보낸 요청이 순서대로 쌓인다. 입력창 바로 위에 붙는다.
+ * 2026-11-20 정리(사용자 "Claude 참고, 모두 지우기와 ✕ 차이가 뭔지, 레이아웃 · 버튼 디자인 시스템에 맞게"):
+ *  - 한 장씩 넘기던 카드(‹ › · 점) → Claude처럼 **모든 대기를 짧은 목록**으로(최대 MAX_QUEUE개라 길지 않다)
+ *  - 머리: "대기 중 N개 · 지금 일이 끝나면 차례로 보내요" ··· [모두 빼기](2개 이상일 때만)
+ *  - 줄: 순서 번호 · 요청 한 줄(넘치면 …, 전체는 툴팁) ··· [↑ 지금 보내기] [✕ 빼기]
+ *    "모두 지우기"와 ✕가 같은 일을 다른 말로 하고 있어서 말을 맞췄다: 줄의 ✕ = 이것만 빼기, 머리 = 모두 빼기
+ *  - 버튼은 공통 작은 칸(32px · 아이콘 16px), 글자 버튼은 12px 회색
  */
 function QueueTray({ items, onRemove, onSendNow, onClear }: {
   items: QueueItem[]; onRemove: (id: number) => void; onSendNow: (id: number) => void; onClear: () => void;
 }) {
-  const scroller = useRef<HTMLDivElement>(null);
-  const [idx, setIdx] = useState(0);
-  const at = Math.min(idx, items.length - 1);
-  // 항목이 줄면(실행·빼기) 보이는 카드 번호를 맞춘다
-  useEffect(() => { if (idx > items.length - 1) setIdx(Math.max(0, items.length - 1)); }, [items.length, idx]);
-  const go = (i: number) => {
-    const n = Math.max(0, Math.min(items.length - 1, i));
-    setIdx(n);
-    const el = scroller.current;
-    el?.scrollTo({ left: n * el.clientWidth, behavior: "smooth" });
-  };
-  const onScroll = () => {
-    const el = scroller.current;
-    if (el && el.clientWidth) setIdx(Math.round(el.scrollLeft / el.clientWidth));
-  };
-  const navBtn = "size-6 shrink-0 flex items-center justify-center rounded-full hover:bg-black/[0.06] disabled:opacity-30 disabled:hover:bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]";
-  const iconBtn = "size-6 shrink-0 flex items-center justify-center rounded-full hover:bg-black/[0.06] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]";
+  const iconBtn = "size-8 shrink-0 flex items-center justify-center rounded-md hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]";
   return (
-    <div
-      className="mb-2 rounded-xl" style={{ background: "#f8fafc", border: "1px solid #eef0f3" }}
-      role="region" aria-roledescription="대기열" aria-label={`대기 중인 요청 ${items.length}개`}
-      onKeyDown={(e) => { if (e.key === "ArrowLeft") { e.preventDefault(); go(at - 1); } if (e.key === "ArrowRight") { e.preventDefault(); go(at + 1); } }}
-    >
-      <div className="flex items-center gap-1" style={{ padding: "8px 8px 0 12px" }}>
-        <Clock size={12} color="#64748b" className="shrink-0" />
-        <span className="shrink-0 whitespace-nowrap" style={{ fontSize: editorType.caption, fontWeight: 700, color: "#334155" }} aria-live="polite">대기 {at + 1}/{items.length}</span>
-        <span className="truncate" style={{ fontSize: editorType.caption, color: "#94a3b8" }}>· 끝나면 차례로 보내요</span>
-        <div className="ml-auto flex items-center">
-          {items.length > 1 && (
-            <>
-              <IconTooltip label="이전 대기" side="top"><button type="button" aria-label="이전 대기" disabled={at === 0} onClick={() => go(at - 1)} className={navBtn}><ChevronLeft size={14} color="#475569" /></button></IconTooltip>
-              <IconTooltip label="다음 대기" side="top"><button type="button" aria-label="다음 대기" disabled={at === items.length - 1} onClick={() => go(at + 1)} className={navBtn}><ChevronRight size={14} color="#475569" /></button></IconTooltip>
-              <button type="button" onClick={onClear} className="shrink-0 rounded px-2 h-6 hover:bg-black/[0.05]" style={{ fontSize: editorType.caption, color: "#64748b" }}>모두 지우기</button>
-            </>
-          )}
-        </div>
+    <div className="mb-2 rounded-xl" style={{ background: "#f8fafc", border: "1px solid #eef0f3" }} role="region" aria-label={`대기 중인 요청 ${items.length}개`}>
+      <div className="flex items-center gap-1.5 h-9" style={{ padding: "0 4px 0 12px" }}>
+        <span className="shrink-0" style={{ fontSize: editorType.caption, fontWeight: 600, color: "#334155" }} aria-live="polite">대기 중 {items.length}개</span>
+        <span className="truncate" style={{ fontSize: editorType.caption, color: "#64748b" }}>· 지금 일이 끝나면 차례로 보내요</span>
+        {items.length > 1 && (
+          <button type="button" onClick={onClear} className="ml-auto shrink-0 rounded-md px-2 h-7 hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ fontSize: editorType.caption, fontWeight: 600, color: "#475569" }}>모두 빼기</button>
+        )}
       </div>
-      <div ref={scroller} onScroll={onScroll} className="flex overflow-x-auto snap-x snap-mandatory" style={{ scrollbarWidth: "none" }}>
+      <ol style={{ padding: "0 4px 4px" }}>
         {items.map((it, i) => (
-          <div key={it.id} className="w-full shrink-0 snap-start flex items-start gap-2" style={{ padding: "4px 8px 8px 12px" }} aria-hidden={i !== at} aria-label={`${i + 1}번째 대기`}>
-            <p className="flex-1 min-w-0 line-clamp-2" style={{ fontSize: editorType.large, lineHeight: "20px", color: "#1f2937", wordBreak: "break-word" }} title={it.req.prompt}>
+          <li key={it.id} className="flex items-center gap-2 rounded-lg bg-white" style={{ padding: "4px 4px 4px 10px", marginTop: i ? 4 : 0, boxShadow: "inset 0 0 0 1px #eef0f3" }}>
+            <span className="shrink-0 w-4 text-center" style={{ fontSize: editorType.caption, fontWeight: 600, color: "#94a3b8" }}>{i + 1}</span>
+            <p className="flex-1 min-w-0 truncate" style={{ fontSize: editorType.body, lineHeight: "20px", color: "#1f2937" }} title={it.req.prompt}>
               {it.req.prompt}
-              {it.req.attachments.length > 0 && <span style={{ fontSize: editorType.caption, color: "#94a3b8" }}> · 첨부 {it.req.attachments.length}</span>}
+              {it.req.attachments.length > 0 && <span style={{ fontSize: editorType.caption, color: "#64748b" }}> · 첨부 {it.req.attachments.length}</span>}
             </p>
-            <IconTooltip label="지금 작업을 멈추고 이 요청 먼저 보내기" side="top"><button type="button" aria-label="바로 보내기" tabIndex={i === at ? 0 : -1} onClick={() => onSendNow(it.id)} className={iconBtn} style={{ background: "#fff", boxShadow: "inset 0 0 0 1px #e5e7eb" }}>
-              <ArrowUp size={12} color={color.brand} strokeWidth={2.4} />
+            <IconTooltip label="지금 보내기: 하던 일을 멈추고 이것부터" side="top"><button type="button" aria-label={`${i + 1}번 지금 보내기`} onClick={() => onSendNow(it.id)} className={iconBtn}>
+              <ArrowUp size={16} color={color.brand} strokeWidth={2.2} />
             </button></IconTooltip>
-            <IconTooltip label="대기에서 빼기" side="top"><button type="button" aria-label="대기에서 빼기" tabIndex={i === at ? 0 : -1} onClick={() => onRemove(it.id)} className={iconBtn}>
-              <X size={12} color="#64748b" />
+            <IconTooltip label="이것만 빼기" side="top"><button type="button" aria-label={`${i + 1}번 빼기`} onClick={() => onRemove(it.id)} className={iconBtn}>
+              <X size={16} color="#64748b" />
             </button></IconTooltip>
-          </div>
+          </li>
         ))}
-      </div>
-      {items.length > 1 && (
-        <div className="flex justify-center gap-1" style={{ paddingBottom: 8 }} aria-hidden>
-          {items.map((it, i) => <span key={it.id} className="rounded-full transition-all" style={{ width: i === at ? 12 : 4, height: 4, background: i === at ? color.brand : "#cbd5e1" }} />)}
-        </div>
-      )}
+      </ol>
     </div>
   );
 }
 
-function BriefCard({ brief, onSend, defaultOpen = false, onClose }: { brief: BriefConfig; onSend: (text: string) => void; defaultOpen?: boolean; onClose?: () => void }) {
+function BriefCard({ brief, onSend, defaultOpen = false, onClose, onOpenChange, bare = false }: { brief: BriefConfig; onSend: (text: string) => void; defaultOpen?: boolean; onClose?: () => void; onOpenChange?: (open: boolean) => void; /** 첫 화면에서 펼쳤을 때: 상자 없이 패널에 바로 놓고 제목을 머리처럼 크게 */ bare?: boolean }) {
   const [open, setOpenState] = useState(defaultOpen);
-  const setOpen = (o: boolean) => { setOpenState(o); if (!o) onClose?.(); };
+  const setOpen = (o: boolean) => { setOpenState(o); onOpenChange?.(o); if (!o) onClose?.(); };
+  useEffect(() => { onOpenChange?.(defaultOpen); return () => onOpenChange?.(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [v, setV] = useState<Record<string, string>>({});
   const ready = brief.requireAny ? brief.fields.some((x) => (v[x.id] ?? "").trim()) : brief.fields.every((x) => !x.required || (v[x.id] ?? "").trim());
   const title = brief.title ?? "자세히 적어서 요청하기";
@@ -509,12 +501,12 @@ function BriefCard({ brief, onSend, defaultOpen = false, onClose }: { brief: Bri
   const field = "w-full rounded-lg outline-none border border-[#e5e7eb] focus:border-[#4f7bff] bg-white";
   return (
     <form
-      className="mt-4 rounded-xl p-3" style={{ border: "1px solid #e5e7eb", background: "#fbfcfd" }}
+      className={bare ? "pt-1" : "mt-4 rounded-xl p-3"} style={bare ? undefined : { border: "1px solid #e5e7eb", background: "#fbfcfd" }}
       onSubmit={(e) => { e.preventDefault(); if (!ready) return; onSend(brief.compose(v)); setOpen(false); setV({}); }}
       aria-label={title}
     >
       <div className="flex items-center">
-        <span className="min-w-0 truncate" style={{ fontSize: editorType.body, fontWeight: 700, color: "#111827" }}>{title}</span>
+        <span className="min-w-0 truncate" style={bare ? { fontSize: editorType.chat, lineHeight: "24px", fontWeight: 700, color: "#111827" } : { fontSize: editorType.body, fontWeight: 700, color: "#111827" }}>{title}</span>
         <button type="button" aria-label="닫기" onClick={() => setOpen(false)} className="ml-auto size-6 flex items-center justify-center rounded-md hover:bg-black/[0.05]"><X size={13} color="#64748b" /></button>
       </div>
       <p style={{ fontSize: editorType.caption, color: "#64748b", marginTop: 2, wordBreak: "keep-all" }}>{brief.description ?? "적은 내용으로 요청 문장을 만들어 바로 보내요."}</p>
@@ -543,11 +535,16 @@ function BriefCard({ brief, onSend, defaultOpen = false, onClose }: { brief: Bri
   );
 }
 
+/**
+ * 예시 요청(2026-11-20 다듬음, 사용자 "좀 더 죽여도 될 듯, 세련되게"): 상자 · ✨ 아이콘을 빼고 얇은 선으로 나뉜 글자 목록(ChatGPT · Claude 첫 화면처럼).
+ * 위의 "자세히 적어서 요청하기" 카드가 주인공이고 예시는 한 단계 조용하게: 라벨 12px 회색, 글자 14px 진회색, 마우스를 올리면 연한 바탕 + → 화살표.
+ */
 function Suggestions({ items, onPick }: { items: string[]; onPick: (s: string) => void }) {
   if (!items.length) return null;
+  // 예전 칩 모양으로 되돌림(2026-11-20): 글자 길이만큼의 테두리 버튼, 라벨 "이렇게 시켜 보세요"
   return (
-    <div className="flex flex-col gap-2 mt-4">
-      {<p style={{ fontSize: editorType.caption, fontWeight: 600, color: "#64748b" }}>이렇게 시켜 보세요</p>}
+    <div className="flex flex-col gap-2 mt-4" data-onboarding="ai-suggest">
+      <p style={{ fontSize: editorType.caption, fontWeight: 600, color: "#64748b" }}>이렇게 시켜 보세요</p>
       {items.map((s) => (
         <button key={s} type="button" onClick={() => onPick(s)} className="self-start text-left rounded-lg px-3 py-2 hover:bg-[#eef2ff] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ fontSize: editorType.label, color: "#334155", border: "1px solid #e5e7eb", wordBreak: "keep-all" }}>
           {s}
@@ -568,9 +565,8 @@ function AttachChip({ a, onRemove }: { a: AiAttachment; onRemove?: () => void })
   );
 }
 
-function AiTurn({ m, isLatest, onRunPlan, onCancelPlan, onShow, onUndo }: { m: AiMsg; isLatest: boolean; onRunPlan: () => void; onCancelPlan: () => void; onShow?: (r: AiResult) => void; onUndo?: (r: AiResult) => void }) {
+function AiTurn({ m, onRunPlan, onCancelPlan, onShow }: { m: AiMsg; isLatest: boolean; onRunPlan: () => void; onCancelPlan: () => void; onShow?: (r: AiResult) => void }) {
   const [open, setOpen] = useState(false);
-  const [undone, setUndone] = useState(false);
   if (m.status === "plan" || m.status === "cancelled") {
     return (
       <div className="rounded-2xl" style={{ border: "1px solid #eef0f3", padding: 16 }}>
@@ -626,31 +622,26 @@ function AiTurn({ m, isLatest, onRunPlan, onCancelPlan, onShow, onUndo }: { m: A
       {/* 결과 카드 — 누르면 캔버스에서 선택해 보여 준다(따로 "선택해서 보기" 버튼을 두지 않는다) */}
       {r.target && (
         <button
-          type="button" disabled={undone} onClick={() => onShow?.(r)}
-          className="self-stretch flex items-center gap-3 rounded-xl px-3 py-2 text-left bg-white hover:bg-[#f8fafc] disabled:opacity-50 disabled:hover:bg-white outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
+          type="button" onClick={() => onShow?.(r)}
+          className="self-stretch flex items-center gap-3 rounded-xl px-3 py-2 text-left bg-white hover:bg-[#f8fafc] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
           style={{ border: "1px solid #e5e7eb" }}
-          title={undone ? undefined : "캔버스에서 선택해 보기"}
+          title="캔버스에서 선택해 보기"
         >
           <span className="size-8 shrink-0 rounded-lg flex items-center justify-center" style={{ background: color.surface.accent }}><Frame size={15} color={color.brand} /></span>
           <span className="min-w-0 flex-1">
             <span className="block truncate" style={{ fontSize: editorType.body, fontWeight: 700, color: "#111827" }}>{r.target.label}</span>
-            <span className="block truncate" style={{ fontSize: editorType.caption, color: "#64748b" }}>{undone ? "되돌렸어요" : r.target.meta}</span>
+            <span className="block truncate" style={{ fontSize: editorType.caption, color: "#64748b" }}>{r.target.meta}</span>
           </span>
-          {!undone && <ChevronRight size={14} color="#94a3b8" className="shrink-0" />}
+          <ChevronRight size={14} color="#94a3b8" className="shrink-0" />
         </button>
       )}
-      {/* 바닥 줄 — 쓴 크레딧(조용히) · 최신 결과에만 ↶ 되돌리기. 평가·복사 버튼은 두지 않는다 */}
-      {(r.credit > 0 || m.req.model || (isLatest && r.createdRootId && !undone)) && !r.clarify && (
+      {/* 바닥 줄 — 쓴 크레딧(조용히). 되돌리기는 뺐다(2026-11-20 사용자 "필요 없어 보인다": ⌘Z와 버전 기록으로 되돌린다) */}
+      {(r.credit > 0 || m.req.model) && !r.clarify && (
         <div className="flex items-center gap-2" style={{ fontSize: editorType.caption, color: "#94a3b8" }}>
           {/* 무엇으로 만들었는지 남긴다(docs/ai-models.md "2-4") */}
           {m.req.model && isOwnKey(m.req.model)
             ? <span>{modelLabel(m.req.model)} · 내 키, 크레딧 안 씀</span>
             : <span>{m.req.model ? `${modelLabel(m.req.model, true)} · ` : ""}{r.credit > 0 ? `크레딧 ${r.credit.toLocaleString()} 사용` : "크레딧 안 씀"}</span>}
-          {isLatest && r.createdRootId && !undone && (
-            <button type="button" onClick={() => { onUndo?.(r); setUndone(true); }} title="이 작업으로 만든 화면을 지워요 (⌘Z로 다시 살릴 수 있어요)" className="ml-auto inline-flex items-center gap-1 rounded-md px-2 h-6 hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ fontSize: editorType.caption, fontWeight: 600, color: "#475569" }}>
-              <Undo2 size={12} />되돌리기
-            </button>
-          )}
         </div>
       )}
     </div>
@@ -686,7 +677,7 @@ function ProjectSheet({ instructions, setInstructions, files, onUpload, onRemove
         </div>
         <p style={{ fontSize: editorType.caption, color: "#94a3b8", marginTop: 4 }}>{fmtSize(used)} / 100MB 사용</p>
         {files.length === 0 ? (
-          <p style={{ fontSize: editorType.caption, lineHeight: "18px", color: "#94a3b8", padding: "16px 0", wordBreak: "keep-all" }}>브랜드 가이드 PDF, 로고, 참고 화면 캡처, 디자인 시스템 .fig 등을 올려 두세요.</p>
+          <p style={{ fontSize: editorType.caption, lineHeight: "18px", color: "#94a3b8", padding: "16px 0", wordBreak: "keep-all" }}>브랜드 가이드, 로고, 참고 문서나 이미지처럼 작업할 때마다 참고할 파일을 올려 두세요.</p>
         ) : (
           <ul className="mt-2 flex flex-col">
             {files.map((x) => (

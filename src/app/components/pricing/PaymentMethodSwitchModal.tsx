@@ -72,7 +72,7 @@ export function PaymentMethodSwitchModal({
         setMethods((prev) => [...prev, newMethod]);
         setSelectedId(newMethod.paymentMethodId); // 등록만 됐을 뿐, 확정은 "선택한 카드로 변경"을 눌러야 한다.
       } else if (result.status === "failure") {
-        setRegisterError("카드를 등록하지 못했습니다. 다시 시도해주세요.");
+        setRegisterError("카드를 등록하지 못했어요. 다시 시도해 주세요.");
       }
       // cancelled: 사용자가 Toss 등록창을 닫은 것 — 오류로 과장하지 않고 조용히 되돌아간다.
     });
@@ -86,7 +86,7 @@ export function PaymentMethodSwitchModal({
     setDeleteError(null);
     deletePaymentMethodWithServer(deleteTarget.paymentMethodId).then(({ success }) => {
       setDeleting(false);
-      if (!success) { setDeleteError("카드를 삭제하지 못했습니다. 다시 시도해주세요."); return; }
+      if (!success) { setDeleteError("카드를 삭제하지 못했어요. 다시 시도해 주세요."); return; }
       removePaymentMethod(deleteTarget.paymentMethodId);
       const rest = methods.filter((m) => m.paymentMethodId !== deleteTarget.paymentMethodId);
       setMethods(rest);
@@ -94,7 +94,7 @@ export function PaymentMethodSwitchModal({
         setSelectedId(rest.find((m) => m.isDefault)?.paymentMethodId ?? rest[0]?.paymentMethodId ?? null);
       }
       setDeleteTarget(null);
-      showToast("카드가 삭제되었습니다.");
+      showToast("카드를 삭제했어요.");
     });
   };
 
@@ -105,13 +105,13 @@ export function PaymentMethodSwitchModal({
     switchDefaultPaymentMethod(selectedId).then(({ success }) => {
       setSwitching(false);
       if (!success) {
-        setSwitchError("결제 수단을 변경하지 못했습니다. 다시 시도해주세요.");
+        setSwitchError("결제 수단을 바꾸지 못했어요. 다시 시도해 주세요.");
         return;
       }
       commitDefaultPaymentMethod(selectedId);
       const changed = methods.find((m) => m.paymentMethodId === selectedId);
       if (changed) onChanged({ ...changed, isDefault: true });
-      showToast("결제 수단이 변경되었습니다.");
+      showToast("결제 수단을 바꿨어요.");
       close();
     });
   };
@@ -154,7 +154,7 @@ export function PaymentMethodSwitchModal({
               <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: color.text.muted, padding: "12px 0" }}>결제 수단을 불러오는 중입니다…</p>
             ) : listState === "error" ? (
               <div className="flex items-center justify-between gap-3 py-2">
-                <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: "#ef4444" }}>결제 수단을 불러오지 못했습니다.</p>
+                <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: "#ef4444" }}>결제 수단을 불러오지 못했어요.</p>
                 <Button variant="secondary" size="md" onClick={loadList}>다시 시도</Button>
               </div>
             ) : (

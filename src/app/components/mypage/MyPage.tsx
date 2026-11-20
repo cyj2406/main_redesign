@@ -12,6 +12,7 @@ import { findPlan, useSubscription } from "@/app/state/subscription";
 import { color, f, radius, shadow, typography } from "@/app/styleTokens";
 
 import { ProfileAvatar } from "./ProfileAvatar";
+import { josa } from "@/app/copy";
 
 /**
  * 마이페이지(프로필 메뉴 > 마이페이지) — 2026-11-19. 기획: docs/mypage.md.
@@ -34,7 +35,18 @@ const CARD_STYLE = {
 /** 줄 끝 텍스트 버튼(수정·삭제 요청) */
 const LINK_BUTTON_CLASS =
   "shrink-0 px-2 py-1.5 -mr-2 rounded-md outline-none transition-colors hover:bg-black/[0.05] focus-visible:ring-2 focus-visible:ring-[#4f7bff] disabled:opacity-40 disabled:hover:bg-transparent";
-const linkButtonStyle = { ...f, fontWeight: 600, fontSize: 13.5, color: color.brand, letterSpacing: "-0.2px" } as const;
+const linkButtonStyle = { ...f, fontWeight: 600, fontSize: 14, color: color.brand, letterSpacing: "-0.2px" } as const;
+
+/**
+ * 글자 위계(2026-11-20, 사용자 "텍스트 위계·색감이 안 잡힌 것 같다" → UX 규칙대로 정리).
+ * 전에는 설명(13.5 · #4b5262 회색) · 라벨(14 · 슬레이트) · 값(14 · 검정)이 크기는 거의 같고 회색만 두 계열로 섞여 위계가 안 보였다.
+ * 이제 4단계, 회색은 color.text.secondary 하나만: 카드 제목 17/700 검정 → 값 15/500 검정 → 라벨 14/500 회색 → 설명 14/400 회색.
+ * 위험한 행동(삭제 요청)은 빨강 #dc2626(흰 바탕 4.8:1, 14px 글자 대비 기준 4.5:1 통과).
+ */
+const VALUE = { ...typography.formValue, fontSize: 15, letterSpacing: "-0.2px" } as const;
+const LABEL = { ...f, fontWeight: 500, fontSize: 14, color: color.text.secondary, letterSpacing: "-0.2px" } as const;
+const DESC = { ...f, fontWeight: 400, fontSize: 14, lineHeight: "20px", color: color.text.secondary, letterSpacing: "-0.2px" } as const;
+const DANGER = "#dc2626";
 
 /** 로그인 방법 — 지금 서비스는 Google · 카카오. 어떤 방법으로 로그인했는지 보여 주기만 한다(연결·해제는 없음) */
 const LOGIN_PROVIDER = { google: { name: "Google", mark: "G", bg: "#fff", fg: "#4285f4" }, kakao: { name: "카카오", mark: "K", bg: "#fee500", fg: "#191919" } } as const;
@@ -58,31 +70,31 @@ export function MyPage({ onOpenPricing, onOpenSettings }: {
       <div className="w-full mx-auto flex flex-col gap-5" style={{ maxWidth: 720 }}>
         <PageHeader title="마이페이지" description="내 정보와 이용 현황을 한눈에 봐요." />
 
-        <Card title="프로필" desc="사진과 이름은 함께 작업하는 사람(공유·코멘트)에게도 이렇게 보여요.">
+        <Card title="프로필" desc="공유하거나 코멘트를 남기면 함께 작업하는 사람에게도 이 사진과 이름이 보여요.">
           <AvatarEditor profile={profile} />
           <div className="mt-4" style={{ borderTop: `1px solid ${color.surface.hover}` }}>
             <EditableRow label="이름" field="name" required editing={editing} setEditing={setEditing} value={profile.name} limit={PROFILE_LIMITS.name} placeholder="이름을 입력하세요" help="함께 작업하는 사람에게 이 이름으로 보여요." />
             <Row label="이메일">
-              <span className="truncate" style={typography.formValue}>{profile.email}</span>
+              <span className="truncate" style={VALUE}>{profile.email}</span>
             </Row>
             <Row label="로그인 방법" last>
               <span className="flex items-center gap-2.5 min-w-0">
                 <span className="size-7 rounded-full flex items-center justify-center shrink-0" style={{ background: login.bg, color: login.fg, fontSize: 12.5, fontWeight: 800, boxShadow: "inset 0 0 0 1px #e2e8f0" }}>{login.mark}</span>
-                <span style={typography.formValue}>{login.name}로 로그인</span>
+                <span style={VALUE}>{login.name}로 로그인</span>
               </span>
             </Row>
           </div>
         </Card>
 
         <Card title="내 이용 현황" desc="자세한 관리는 각 화면에서 해요.">
-          <LinkRow label="요금제·크레딧" value={`${hasPlan && plan ? plan.name : "무료"} · 크레딧 ${credit.toLocaleString()}`} action="요금제 및 크레딧" onClick={onOpenPricing} />
+          <LinkRow label="요금제와 크레딧" value={`${hasPlan && plan ? plan.name : "무료"} · 크레딧 ${credit.toLocaleString()}`} action="요금제 및 크레딧" onClick={onOpenPricing} />
           <LinkRow label="AI 모델" value={`기본 ${modelLabel(models.defaultModel)}${ownModels(models).length ? ` · 내 AI ${ownModels(models).length}개 연결` : ""}`} action="AI 모델 설정" onClick={onOpenSettings && (() => onOpenSettings("AI 모델"))} last />
         </Card>
 
         <Card title="계정">
           <Row label="계정 삭제" last>
-            <span style={{ ...typography.body, color: color.text.secondary }}>작업물과 크레딧이 모두 사라지며 되돌릴 수 없어요. 구독 중이면 먼저 해지해 주세요.</span>
-            <button type="button" className={LINK_BUTTON_CLASS} style={{ ...linkButtonStyle, color: "#ef4444" }} onClick={() => showToast("계정 삭제는 고객센터(문의하기)로 요청해 주세요.")}>삭제 요청</button>
+            <span style={DESC}>작업물과 크레딧이 모두 사라지고 되돌릴 수 없어요. 구독 중이면 먼저 해지해 주세요.</span>
+            <button type="button" className={LINK_BUTTON_CLASS} style={{ ...linkButtonStyle, color: DANGER }} onClick={() => showToast("계정 삭제는 문의하기에서 요청해 주세요.")}>삭제 요청</button>
           </Row>
         </Card>
       </div>
@@ -94,7 +106,7 @@ function Card({ title, desc, children }: { title: string; desc?: string; childre
   return (
     <section style={{ ...CARD_STYLE, padding: "22px 24px 10px" }}>
       <h2 style={typography.sectionTitle}>{title}</h2>
-      {desc && <p style={{ ...typography.body, color: color.text.secondary, marginTop: 4 }}>{desc}</p>}
+      {desc && <p style={{ ...DESC, marginTop: 4 }}>{desc}</p>}
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -103,11 +115,12 @@ function Card({ title, desc, children }: { title: string; desc?: string; childre
 function LinkRow({ label, value, action, onClick, last }: { label: string; value: string; action: string; onClick?: () => void; last?: boolean }) {
   return (
     <Row label={label} last={last}>
-      <span className="truncate" style={typography.formValue}>{value}</span>
+      <span className="truncate" style={VALUE}>{value}</span>
       {onClick && <button type="button" className={LINK_BUTTON_CLASS} style={linkButtonStyle} onClick={onClick}><span className="inline-flex items-center">{action}<ChevronRight size={14} /></span></button>}
     </Row>
   );
 }
+
 
 /* ───────────────────────── 프로필 사진 ───────────────────────── */
 
@@ -137,7 +150,7 @@ function AvatarEditor({ profile }: { profile: Profile }) {
           <Button
             variant="secondary"
             size="md"
-            onClick={() => { updateProfile({ avatarUrl: null }); showToast("사진을 삭제하고 이니셜로 표시해요."); }}
+            onClick={() => { updateProfile({ avatarUrl: null }); showToast("사진을 지웠어요. 이제 이름 첫 글자로 보여요."); }}
           >
             <Trash2 size={15} strokeWidth={1.8} />삭제
           </Button>
@@ -164,7 +177,7 @@ function Row({ label, children, last }: { label: string; children: ReactNode; la
       className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-4 py-3.5"
       style={{ borderBottom: last ? undefined : `1px solid ${color.surface.hover}` }}
     >
-      <span className="sm:w-[112px] shrink-0" style={{ ...typography.formLabel, color: color.text.secondary, fontWeight: 500 }}>{label}</span>
+      <span className="sm:w-[112px] shrink-0" style={LABEL}>{label}</span>
       <div className="flex-1 min-w-0 flex items-center justify-between gap-3">{children}</div>
     </div>
   );
@@ -194,11 +207,11 @@ function EditableRow({
   const cancel = () => { setError(null); setEditing(null); };
   const save = () => {
     const next = draft.trim().replace(/\s+/g, " ");
-    if (required && !next) { setError(`${label}을 입력해 주세요.`); return; }
+    if (required && !next) { setError(`${josa(label, "을/를")} 입력해 주세요.`); return; }
     if (next.length > limit) { setError(`${limit}자 이내로 입력해 주세요.`); return; }
     if (next !== value) {
       updateProfile({ [field]: next } as Partial<Profile>);
-      showToast(`${label}을(를) 저장했어요.`);
+      showToast(`${josa(label, "을/를")} 저장했어요.`);
     }
     setEditing(null);
   };
@@ -207,9 +220,9 @@ function EditableRow({
     return (
       <Row label={label} last={last}>
         {value ? (
-          <span className="truncate" style={typography.formValue}>{value}</span>
+          <span className="truncate" style={VALUE}>{value}</span>
         ) : (
-          <span style={{ ...typography.formValue, color: color.text.placeholder }}>{placeholder}</span>
+          <span style={{ ...VALUE, color: color.text.placeholder }}>{placeholder}</span>
         )}
         <button type="button" className={LINK_BUTTON_CLASS} style={linkButtonStyle} onClick={open}>
           {value || !emptyLabel ? "수정" : emptyLabel}
@@ -246,8 +259,8 @@ function EditableRow({
         placeholderStyle={typography.formPlaceholder}
       />
       <div id={`profile-${field}-help`} className="flex justify-between gap-3 mt-1.5" style={typography.caption}>
-        <span style={{ color: error ? "#ef4444" : color.text.secondary }}>{error ?? help ?? ""}</span>
-        <span style={{ color: over ? "#ef4444" : color.text.secondary }}>{draft.trim().length}/{limit}</span>
+        <span style={{ color: error ? DANGER : color.text.secondary }}>{error ?? help ?? ""}</span>
+        <span style={{ color: over ? DANGER : color.text.secondary }}>{draft.trim().length}/{limit}</span>
       </div>
       <div className="flex justify-end gap-2 mt-3">
         <Button variant="secondary" size="md" onClick={cancel}>취소</Button>

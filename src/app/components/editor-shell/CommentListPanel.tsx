@@ -68,19 +68,19 @@ export function CommentListPanel<T extends CommentThreadBase>({
             <CheckCheck size={15} color="#475569" />
           </button></IconTooltip>
           {onToggleHidden && (
-            <IconTooltip label={`${hidden ? "캔버스에 코멘트 보이기" : "캔버스에서 코멘트 숨기기"} (⇧C)`}><button type="button" className={iconBtn} aria-pressed={hidden} aria-label={hidden ? "캔버스에 코멘트 보이기" : "캔버스에서 코멘트 숨기기"} onClick={onToggleHidden}>
+            <IconTooltip label={`${hidden ? "캔버스에 코멘트 보이기" : "캔버스에서 코멘트 숨기기"}`}><button type="button" className={iconBtn} aria-pressed={hidden} aria-label={hidden ? "캔버스에 코멘트 보이기" : "캔버스에서 코멘트 숨기기"} onClick={onToggleHidden}>
               {hidden ? <EyeOff size={15} color="#475569" /> : <Eye size={15} color="#475569" />}
             </button></IconTooltip>
           )}
         </div>
       </div>
       {hidden && (
-        <p className="shrink-0" style={{ fontSize: editorType.caption, color: "#92400e", background: "#fffbeb", padding: "8px 16px" }}>캔버스에서 숨김 중. 코멘트 모드(C)에서는 보여요</p>
+        <p className="shrink-0" style={{ fontSize: editorType.caption, color: "#92400e", background: "#fffbeb", padding: "8px 16px" }}>캔버스에서 숨김 중. 코멘트 모드에서는 보여요</p>
       )}
       <div className="shrink-0 flex items-center gap-2" style={{ padding: "12px 12px 12px" }}>
-        <label className="flex-1 min-w-0 flex items-center gap-2 rounded-lg px-3 h-8" style={{ background: "#f5f5f5" }}>
+        <label className="field-pill flex-1 min-w-0 flex items-center gap-2 rounded-lg px-3 h-8 border border-transparent" style={{ background: "#f5f5f5" }}>
           <Search size={13} color="#9ca3af" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="코멘트·작성자 검색" className="flex-1 min-w-0 bg-transparent outline-none" style={{ fontSize: editorType.label, color: "#111827" }} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="코멘트나 작성자 검색" className="field-inline flex-1 min-w-0 bg-transparent outline-none" style={{ fontSize: editorType.label, color: "#111827" }} />
         </label>
         <div ref={filterRef} className="relative">
           <IconTooltip label="필터"><button type="button" aria-label={`필터${activeFilters ? ` (${activeFilters}개 켜짐)` : ""}`} aria-expanded={filterOpen} onClick={() => setFilterOpen((v) => !v)} className="relative size-8 flex items-center justify-center rounded-lg hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ background: activeFilters ? color.surface.accent : undefined }}>

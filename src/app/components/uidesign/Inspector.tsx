@@ -158,7 +158,7 @@ export function Inspector({ page, node, zoom, onZoom, onNode, onPageBg, mode, on
               <button type="button" onClick={() => { void navigator.clipboard?.writeText(cssOf(node)).catch(() => {}); }} className="mt-2 w-full h-7 rounded-md hover:bg-[#f3f4f6]" style={{ fontSize: editorType.caption, fontWeight: 600, color: "#334155", border: "1px solid #e5e7eb" }}>CSS 복사</button>
             </div>
           ) : (
-            <p style={{ ...SUB, fontSize: editorType.caption, lineHeight: "18px", padding: 16, wordBreak: "keep-all" }}>개발 모드: 요소를 고르면 크기·색·글꼴을 CSS로 보여 줘요.</p>
+            <p style={{ ...SUB, fontSize: editorType.caption, lineHeight: "18px", padding: 16, wordBreak: "keep-all" }}>개발 모드: 요소를 고르면 크기, 색, 글꼴을 CSS로 보여 줘요.</p>
           )
         ) : tab === "prototype" ? (
           <p style={{ ...SUB, fontSize: editorType.caption, lineHeight: "18px", padding: 16, wordBreak: "keep-all" }}>프레임끼리 연결해 화면 전환을 만드는 프로토타입 기능은 준비 중이에요.</p>
@@ -166,7 +166,7 @@ export function Inspector({ page, node, zoom, onZoom, onNode, onPageBg, mode, on
           <>
             <Section title="페이지 배경"><ColorField value={page.bg} onCommit={onPageBg} /></Section>
             {/* 동작하지 않는 섹션(색상 프로필·로컬 변수/스타일·내보내기)은 두지 않는다 — 2026-11-19 겹침·자잘한 정리 */}
-            <p style={{ ...SUB, fontSize: editorType.caption, lineHeight: "17px", padding: "12px 12px", wordBreak: "keep-all" }}>캔버스나 레이어에서 요소를 선택하면 위치·크기·색을 바꿀 수 있어요.</p>
+            <p style={{ ...SUB, fontSize: editorType.caption, lineHeight: "17px", padding: "12px 12px", wordBreak: "keep-all" }}>캔버스나 레이어에서 요소를 고르면 위치, 크기, 색을 바꿀 수 있어요.</p>
           </>
         ) : (
           <>
@@ -196,15 +196,19 @@ export function Inspector({ page, node, zoom, onZoom, onNode, onPageBg, mode, on
                 <div className="flex flex-col gap-1.5">
                   <div className="rounded-md px-2 h-7 flex items-center bg-[#f5f5f5]" style={{ fontSize: editorType.caption, color: "#111827" }}>Pretendard</div>
                   <div className="grid grid-cols-2 gap-1.5">
-                    <select
-                      value={node.fontWeight}
-                      onChange={(e) => onNode({ fontWeight: Number(e.target.value) })}
-                      className="rounded-md px-1.5 h-7 bg-[#f5f5f5] outline-none"
-                      style={{ ...f, fontSize: editorType.caption, color: "#111827" }}
-                      aria-label="굵기"
-                    >
-                      {WEIGHTS.map(([w, l]) => <option key={w} value={w}>{l}</option>)}
-                    </select>
+                    <label className="relative flex items-center">
+                      {/* 2026-11-20 점검: 기본 화살표가 칸마다 달라 보여 숨기고 lucide ChevronDown */}
+                      <select
+                        value={node.fontWeight}
+                        onChange={(e) => onNode({ fontWeight: Number(e.target.value) })}
+                        className="w-full rounded-md pl-1.5 pr-6 h-7 bg-[#f5f5f5] outline-none appearance-none cursor-pointer"
+                        style={{ ...f, fontSize: editorType.caption, color: "#111827" }}
+                        aria-label="굵기"
+                      >
+                        {WEIGHTS.map(([w, l]) => <option key={w} value={w}>{l}</option>)}
+                      </select>
+                      <ChevronDown size={12} color="#6b7280" className="absolute right-1.5 pointer-events-none" />
+                    </label>
                     <NumField label="" value={node.fontSize ?? 16} min={1} onCommit={(v) => onNode({ fontSize: v })} />
                   </div>
                   <div className="flex gap-1">

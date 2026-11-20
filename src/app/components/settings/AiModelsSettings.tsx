@@ -8,6 +8,7 @@ import {
   type ModelId, type ProviderId,
 } from "@/app/state/aiModels";
 import { color, f, radius } from "@/app/styleTokens";
+import { josa } from "@/app/copy";
 
 /**
  * 설정 › AI 모델(2026-11-19). 기획: docs/ai-models.md.
@@ -58,7 +59,7 @@ export function AiModelsSettings() {
       </div>
 
       <div className="flex flex-col gap-3">
-        <SectionHead title="내 AI 연결" desc="쓰고 있는 Claude·ChatGPT·Gemini를 API 키로 연결하면 그 모델로 시킬 수 있어요. 연결한 AI는 딸깍 크레딧을 쓰지 않고, 사용료는 그 서비스에서 청구돼요." />
+        <SectionHead title="내 AI 연결" desc="쓰고 있는 Claude, ChatGPT, Gemini를 API 키로 연결하면 그 모델로 시킬 수 있어요. 연결한 AI는 딸깍 크레딧을 쓰지 않고, 사용료는 그 서비스에서 청구돼요." />
         {PROVIDERS.map((p) => <ProviderCard key={p.id} pid={p.id} />)}
         <p style={{ fontSize: 12, color: color.text.muted, lineHeight: 1.6 }}>
           키는 끝 4자리만 보여요. 모델 목록은 지금 예시예요. 실제로는 연결한 키로 쓸 수 있는 모델을 불러와요.
@@ -79,7 +80,7 @@ function ProviderCard({ pid }: { pid: ProviderId }) {
     const err = connectProvider(pid, key);
     if (err) { setError(err); return; }
     setKey(""); setError(null); setEditing(false);
-    showToast(`${p.product}를 연결했어요. 딸깍 AI 입력창에서 고를 수 있어요.`, "success");
+    showToast(`${josa(p.product, "을/를")} 연결했어요. 딸깍 AI 입력창에서 고를 수 있어요.`, "success");
   };
   return (
     <div className="p-4" style={card}>
@@ -116,7 +117,7 @@ function ProviderCard({ pid }: { pid: ProviderId }) {
             <Button variant="primary" size="md" type="submit">연결</Button>
             <Button variant="secondary" size="md" type="button" onClick={() => { setEditing(false); setKey(""); setError(null); }}>취소</Button>
           </div>
-          <p style={{ fontSize: 12, marginTop: 6, color: error ? "#ef4444" : color.text.muted }}>
+          <p style={{ fontSize: 12, marginTop: 6, color: error ? "#dc2626" : color.text.secondary }}>
             {error ?? <>키는 {p.name} 콘솔에서 만들 수 있어요. <a href={p.keyUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 underline" style={{ color: color.brand }}>키 만들기<ExternalLink size={11} /></a></>}
           </p>
         </form>

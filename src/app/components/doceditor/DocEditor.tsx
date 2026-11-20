@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileUp, LayoutGrid, MessageCircle, Sparkles, History } from "lucide-react";
 
+import { Button } from "@/app/components/common/Button";
 import { showToast } from "@/app/components/common/Toast";
+import { Coachmark } from "@/app/components/onboarding/Coachmark";
+import { STARTER_TOTAL, getStarterPhase, markHintSeen, setStarterPhase, useHintVisible, useStarterPhase } from "@/app/components/onboarding/starterTour";
+import { track } from "@/app/components/onboarding/track";
 import { AiAssistantPanel, type AiRequest, type AiResult, type BriefConfig } from "@/app/components/editor-shell/AiAssistantPanel";
 import { CommentListPanel } from "@/app/components/editor-shell/CommentListPanel";
-import { isUnread, type CommentAuthor } from "@/app/components/editor-shell/comments";
+import { COMMENT_SHORTCUT, isCommentShortcut, isUnread, type CommentAuthor } from "@/app/components/editor-shell/comments";
 import { EditorHeader, type ProfileMenuHandlers, type SaveState, type Viewer, HeaderLabel } from "@/app/components/editor-shell/EditorHeader";
 import { DockButtons, SideDock } from "@/app/components/editor-shell/SideDock";
-import { VersionHistoryPanel } from "@/app/components/editor-shell/VersionHistoryPanel";
+import { VersionHistoryPanel, promptTitle } from "@/app/components/editor-shell/VersionHistoryPanel";
 import { PanelResizeHandle, usePanelWidth } from "@/app/components/editor-shell/PanelResize";
 import { IconTooltip } from "@/app/components/viewer/IconTooltip";
 import { creditFor } from "@/app/state/aiModels";
@@ -22,9 +26,10 @@ import artPdf from "@/assets/home/editor/pdf.png";
 import artVideo from "@/assets/home/editor/video-edit.png";
 import artImage from "@/assets/home/editor/image.png";
 
-import { DocCommentLayer, useDocCommentMembers, type DocThread } from "./DocCommentLayer";
+import { DocCommentLayer, snapToSheetCell, useDocCommentMembers, type DocThread } from "./DocCommentLayer";
 import { DOC_TEMPLATES, type DocKind, type DocTemplate } from "./docTemplates";
 import { MockToolbar } from "./MockToolbar";
+import { EditorLoading, EmbeddedStatus, EmbeddedTop, ImageEditorFrame, PdfHome, PdfTop, VideoEditorFrame } from "./EmbeddedChrome";
 import { PaperThumb } from "./PaperThumb";
 import { TemplatePanel, TemplatePreview } from "./TemplatePanel";
 
@@ -137,37 +142,37 @@ function templateBrief(tpl: DocTemplate): BriefConfig {
 
 const CONF: Record<DocKind, { appId: string; appName: string; label: string; icon: string; ext: string; untitled: string; place: string; surface: string; suggestions: string[]; example: string; brief: BriefConfig }> = {
   hangul: {
-    appId: "hangul", appName: "한글 편집기", label: "한글", icon: artHangul, ext: "hwpx", untitled: "제목 없음", place: "1쪽", surface: "문서",
+    appId: "hangul", appName: "한글 편집기", label: "한글", icon: artHangul, ext: "hwpx", untitled: "제목 없는 문서", place: "1쪽", surface: "문서",
     suggestions: ["행사 개최 알림 공문 써 줘", "출장 결과 보고서 초안 써 줘", "협조 요청 공문 써 줘"],
     example: "“제목을 '2026 사업계획서'로 넣고 아래에 추진 일정 표를 만들어 줘”", brief: DOC_BRIEF,
   },
   word: {
-    appId: "word", appName: "딸깍 문서", label: "워드", icon: artWord, ext: "docx", untitled: "문서", place: "1쪽", surface: "문서",
+    appId: "word", appName: "딸깍 문서", label: "워드", icon: artWord, ext: "docx", untitled: "제목 없는 문서", place: "1쪽", surface: "문서",
     suggestions: ["월간 업무 보고서 초안 써 줘", "회의록 정리해 줘", "자기소개서 지원 동기 써 줘"],
     example: "“제목을 '2026 사업계획서'로 넣고 아래에 일정 표를 만들어 줘”", brief: DOC_BRIEF,
   },
   excel: {
-    appId: "excel", appName: "딸깍 시트", label: "엑셀", icon: artExcel, ext: "xlsx", untitled: "통합 문서", place: "Sheet1", surface: "시트",
+    appId: "excel", appName: "딸깍 시트", label: "엑셀", icon: artExcel, ext: "xlsx", untitled: "제목 없는 시트", place: "Sheet1", surface: "시트",
     suggestions: ["11월 매장별 매출 표 만들어 줘", "거래처 견적 표 만들어 줘", "월별 지출 정리 표 만들어 줘"],
     example: "“A열에 매장, B~E열에 주차별 매출을 넣고 마지막 줄에 합계를 만들어 줘”", brief: SHEET_BRIEF,
   },
   ppt: {
-    appId: "ppt", appName: "딸깍 슬라이드", label: "PPT", icon: artPpt, ext: "pptx", untitled: "프레젠테이션", place: "1번 슬라이드", surface: "슬라이드",
+    appId: "ppt", appName: "딸깍 슬라이드", label: "PPT", icon: artPpt, ext: "pptx", untitled: "제목 없는 발표 자료", place: "1번 슬라이드", surface: "슬라이드",
     suggestions: ["신제품 출시 발표 자료 만들어 줘", "분기 실적 보고 슬라이드 만들어 줘", "회사 소개 5장 만들어 줘"],
     example: "“1장 제목을 '가을 신메뉴 출시'로 바꾸고 아래에 할인 문구를 넣어 줘”", brief: SLIDE_BRIEF,
   },
   pdf: {
-    appId: "pdf", appName: "딸깍 PDF", label: "PDF", icon: artPdf, ext: "pdf", untitled: "새 PDF", place: "1쪽", surface: "PDF",
+    appId: "pdf", appName: "딸깍 PDF", label: "PDF", icon: artPdf, ext: "pdf", untitled: "제목 없는 PDF", place: "1쪽", surface: "PDF",
     suggestions: ["이 PDF 세 줄로 요약해 줘", "3쪽 표를 엑셀로 바꿔 줘", "전화번호·주소 가려 줘"],
     example: "“이 PDF를 세 줄로 요약하고 중요한 숫자만 뽑아 줘”", brief: PDF_BRIEF,
   },
   video: {
-    appId: "video", appName: "딸깍 영상편집", label: "영상", icon: artVideo, ext: "mp4", untitled: "새 프로젝트", place: "00:00", surface: "영상",
+    appId: "video", appName: "딸깍 영상편집", label: "영상", icon: artVideo, ext: "mp4", untitled: "제목 없는 영상", place: "00:00", surface: "영상",
     suggestions: ["신메뉴 홍보 숏폼 만들어 줘", "3초부터 자막 넣어 줘", "배경 음악 잔잔하게 깔아 줘"],
     example: "“3초부터 5초 동안 가운데에 '오늘의 브이로그' 자막을 크게 넣어 줘”", brief: VIDEO_BRIEF,
   },
   image: {
-    appId: "image", appName: "이미지 디자인", label: "이미지", icon: artImage, ext: "png", untitled: "이미지 디자인", place: "1페이지", surface: "캔버스",
+    appId: "image", appName: "이미지 디자인", label: "이미지", icon: artImage, ext: "png", untitled: "제목 없는 이미지", place: "1페이지", surface: "캔버스",
     suggestions: ["가을 할인 이벤트 이미지 만들어 줘", "유튜브 썸네일 만들어 줘", "카드뉴스 표지 만들어 줘"],
     example: "“가운데에 '가을 신메뉴 출시'를 크게 넣고 아래에 할인 문구를 넣어 줘”", brief: IMAGE_BRIEF,
   },
@@ -197,13 +202,15 @@ const STEPS: Record<DocKind, string[]> = {
   image: ["요청 읽기", "구도 잡기", "요소 배치", "캔버스에 넣기"],
 };
 const AI_SHORTCUT = "⌘J";
+const LOADING_TITLE: Record<DocKind, string> = { hangul: "한글 문서를 여는 중", word: "문서를 여는 중", excel: "시트를 여는 중", ppt: "프레젠테이션을 여는 중", pdf: "딸깍 PDF를 여는 중", image: "이미지 편집기를 여는 중", video: "영상 편집기를 준비하는 중" };
 
 interface AiDraft { title: string; sections: { heading: string; body: string }[] }
-interface DocVersion { id: string; at: number; title: string; by: "ai" | "me"; named?: boolean; snap: { name: string; templateId?: string; ai?: AiDraft } }
-interface DocFile { id: string; name: string; templateId?: string; ai?: AiDraft; threads?: DocThread[]; updatedAt: number; /** 버전 기록(영상 편집기 "기록", 2026-11-19). 내용이 바뀌기 직전 상태를 남긴다, 최대 30개 */ versions?: DocVersion[]; /** PDF로 연 파일 이름(내용은 메모리의 object URL) */ pdfName?: string }
+type DocCauseBy = "ai" | "template" | "restore" | "manual";
+/** 버전 하나 = 그때 파일 상태(2026-11-20 다시 설계: 바뀐 "뒤" 상태를 남긴다, 제목은 그 상태를 만든 일). docs/editor-common-header.md "24" */
+interface DocVersion { id: string; at: number; title: string; author: string; saved?: boolean; savedName?: string; snap: { name: string; templateId?: string; ai?: AiDraft } }
+interface DocFile { id: string; name: string; templateId?: string; ai?: AiDraft; threads?: DocThread[]; updatedAt: number; /** 예전 버전 기록(바뀌기 직전 상태, 더는 쓰지 않음) */ versions?: unknown[]; /** 버전 기록: 내용이 바뀐 뒤 상태, 최신이 끝, 최대 30개 */ hist?: DocVersion[]; /** 지금 상태인 버전(되돌리면 그 버전으로 옮겨 간다). 없으면 마지막 */ curId?: string; /** PDF로 연 파일 이름(내용은 메모리의 object URL) */ pdfName?: string; /** 지금 내용을 만든 일(AI 요청 문장 · 템플릿 이름). 버전 기록 제목이 된다 */ cause?: string; causeBy?: DocCauseBy }
 const isEmpty = (d: DocFile) => !d.templateId && !d.ai && !d.pdfName;
 const versionTitle = (d: Pick<DocFile, "templateId" | "ai" | "name">) => d.ai ? d.ai.title : d.templateId ? `${DOC_TEMPLATES.find((t) => t.id === d.templateId)?.title ?? "템플릿"} 템플릿` : d.name;
-const snapshot = (d: DocFile, by: "ai" | "me"): DocVersion => ({ id: newId(), at: Date.now(), title: versionTitle(d), by, snap: { name: d.name, templateId: d.templateId, ai: d.ai } });
 const storeKey = (kind: DocKind) => `ddalkkak.doceditor.${kind}.v1`;
 let seq = 0;
 const newId = () => `d${Date.now().toString(36)}${seq++}`;
@@ -219,7 +226,7 @@ function titleFromPrompt(p: string): string {
   return p.replace(/(초안|을|를)?\s*(써|만들어|작성해|정리해)\s*(줘|주세요|줄래)[.!?]?$/u, "").trim().slice(0, 30) || "새 문서";
 }
 
-export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu, onManageModels, initialDocId }: {
+export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu, onManageModels, initialDocId, initialTemplate, initialPrompt }: {
   kind: DocKind;
   onBack: () => void;
   onBellClick?: () => void;
@@ -229,6 +236,10 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
   onManageModels?: () => void;
   /** 메인 사이드바 "최근 작업"에서 고른 파일 — 있으면 새 빈 문서 대신 그 파일로 연다 */
   initialDocId?: string;
+  /** 홈 B안(2026-11-20): 고른 템플릿으로 바로 시작. withAi면 "내용 채우기" 카드까지 연다 */
+  initialTemplate?: { id: string; withAi: boolean };
+  /** 홈 B안 "빈 화면에서 시작": 딸깍 AI 입력창에 이 문장을 넣어 둔다 */
+  initialPrompt?: string;
 }) {
   const conf = CONF[kind];
   const profile = useProfile();
@@ -237,7 +248,8 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
 
   const untitledName = (list: DocFile[]) => {
     const n = list.filter((d) => d.name.startsWith(conf.untitled)).length;
-    return kind === "word" || kind === "excel" || kind === "ppt" ? `${conf.untitled}${n + 1}` : n ? `${conf.untitled} ${n + 1}` : conf.untitled;
+    // 새 파일 이름 = "제목 없는 ○○"(2026-11-20, 미리캔버스 "제목 없는 디자인"처럼 바꿔야 할 이름이라는 게 보이게). 두 번째부터 " 2"
+    return n ? `${conf.untitled} ${n + 1}` : conf.untitled;
   };
   // 열 때마다 새 빈 문서 하나로 시작한다(홈 "편집기 바로 열기" = 새 문서). 지난 문서는 저장소에만 남는다.
   const [docs, setDocs] = useState<DocFile[]>(() => {
@@ -250,10 +262,16 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
   const active = docs.find((d) => d.id === activeId)!;
   const patch = (id: string, p: Partial<DocFile>) => setDocs((l) => l.map((d) => {
     if (d.id !== id) return d;
-    // 내용(템플릿·AI 결과)이 바뀌기 직전 상태를 버전으로 남긴다(빈 상태는 남기지 않는다)
-    const changesContent = ("templateId" in p || "ai" in p) && !isEmpty(d);
-    const versions = changesContent ? [...(d.versions ?? []), snapshot(d, "ai" in p && p.ai ? "ai" : "me")].slice(-30) : d.versions;
-    return { ...d, ...p, versions, updatedAt: Date.now() };
+    // 내용(템플릿 · AI 결과 · 되돌리기)이 바뀌면 바뀐 뒤 상태를 한 줄 남긴다. 제목 = 그 일, 누가 = 딸깍 AI 또는 그 사람
+    const next = { ...d, ...p, updatedAt: Date.now() };
+    if (("templateId" in p || "ai" in p) && p.causeBy !== "restore" && !isEmpty(next)) {
+      const id = newId();
+      next.curId = id;
+      // 첫 기록이면 바뀌기 전 상태(빈 문서면 "새로 만듦")도 함께 남긴다: 패널에 보이던 그 줄로 되돌아갈 수 있게
+      const start: DocVersion[] = d.hist?.length ? d.hist : [{ id: `now-${d.id}`, at: d.updatedAt, title: isEmpty(d) ? "새로 만듦" : d.cause ?? versionTitle(d), author: d.causeBy === "ai" ? "딸깍 AI" : me.name, snap: { name: d.name, templateId: d.templateId, ai: d.ai } }];
+      next.hist = [...start, { id, at: Date.now(), title: p.cause ?? versionTitle(next), author: p.causeBy === "ai" ? "딸깍 AI" : me.name, snap: { name: next.name, templateId: next.templateId, ai: next.ai } }].slice(-30);
+    }
+    return next;
   }));
 
   // 저장(이 브라우저) — 빈 문서는 저장하지 않는다
@@ -306,6 +324,8 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
   const commentMode = dock === "comments";
   const dockRef = useRef(dock);
   dockRef.current = dock;
+  const kindRef = useRef(kind);
+  kindRef.current = kind;
   const [aiDot, setAiDot] = useState(false);
   const [prefill, setPrefill] = useState<{ text: string; key: number } | undefined>();
   const [briefOpen, setBriefOpen] = useState<{ key: number } | undefined>();
@@ -315,6 +335,12 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
         e.preventDefault(); e.stopPropagation();
         setDock(dockRef.current === "ai" ? null : "ai");
         setAiDot(false);
+        return;
+      }
+      // ⌘⌥M(Ctrl+Alt+M): 코멘트 모드 켜기/끄기(딸깍넷 공통). 영상은 코멘트가 없다
+      if (isCommentShortcut(e) && kindRef.current !== "video") {
+        e.preventDefault(); e.stopPropagation();
+        setDock(dockRef.current === "comments" ? null : "comments");
       }
     };
     window.addEventListener("keydown", onKey, true);
@@ -332,13 +358,26 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
   };
 
   const applyTemplate = (tpl: DocTemplate, { withAi, target }: { withAi: boolean; target: "new" | "replace" }) => {
-    const p: Partial<DocFile> = { templateId: tpl.id, ai: undefined, name: tpl.title };
+    const p: Partial<DocFile> = { templateId: tpl.id, ai: undefined, name: tpl.title, cause: `${tpl.title} 템플릿으로 시작`, causeBy: "template" };
     if (target === "new") openNew(p); else patch(activeId, p);
     setTemplatesOpen(false);
     // AI로 내용 채우기 → 그 템플릿 칸으로 바뀐 "내용 채우기" 카드를 펼친다(빈 입력창에 문장만 넣던 것보다 무엇을 적을지 보인다)
-    if (withAi) { setDock("ai"); setAiDot(false); setBriefOpen({ key: Date.now() }); }
-    else showToast("템플릿을 넣었어요. 템플릿은 상단 '템플릿'으로 다시 열 수 있어요.");
+    // 튜토리얼 2단계에서 AI 버튼을 눌러도 3단계(입력창에 요청을 대신 적어 두기)로 이어지게 카드는 펼치지 않는다
+    if (withAi && getStarterPhase() === "template" && kind === "hangul") setDock("ai");
+    else if (withAi) { setDock("ai"); setAiDot(false); setBriefOpen({ key: Date.now() }); }
+    else showToast("템플릿을 넣었어요. 위쪽 템플릿 버튼으로 다시 열 수 있어요.");
   };
+
+  // 홈 B안에서 템플릿·문장을 들고 열렸을 때 한 번만
+  const startedFromHome = useRef(false);
+  useEffect(() => {
+    if (startedFromHome.current) return;
+    startedFromHome.current = true;
+    const tpl = initialTemplate && DOC_TEMPLATES.find((x) => x.id === initialTemplate.id);
+    if (tpl) applyTemplate(tpl, { withAi: initialTemplate!.withAi, target: "replace" });
+    else if (initialPrompt) { setTemplatesOpen(false); setDock("ai"); setPrefill({ text: initialPrompt, key: Date.now() }); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // AI 되돌리기용 — 결과마다 그 직전 문서 상태
   const undoRef = useRef<Record<string, { docId: string; prev: DocFile }>>({});
@@ -382,7 +421,7 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
     const draft: AiDraft = { title, sections: heads.map((h) => ({ heading: h, body: `${h}에 들어갈 내용을 요청에 맞춰 정리한 자리예요. (목업: 실제 서비스에서는 딸깍 AI가 문장을 채워요.)` })) };
     const resultId = newId();
     undoRef.current[resultId] = { docId, prev: doc };
-    patch(docId, { ai: draft, name: doc.templateId || doc.name.startsWith(conf.untitled) ? title : doc.name });
+    patch(docId, { ai: draft, name: doc.templateId || doc.name.startsWith(conf.untitled) ? title : doc.name, cause: promptTitle(req.prompt), causeBy: "ai" });
     setTemplatesOpen(false);
     // 모델에 따라: 딸깍 AI 높음 2배 · 낮음 절반, 내 키는 0(docs/ai-models.md "2-2")
     const credit = creditFor(req.model, 30);
@@ -392,16 +431,75 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
 
   // 영상편집은 코멘트 없음(dev: 딸깍 AI · 템플릿 · 기록만, docs/editor-common-header.md "1")
   const hasComments = kind !== "video";
+  // 버전 기록(2026-11-20, 사용자 "문서 헤더에 기록 기능이 없다"): 영상만 있던 것을 문서 편집기 전부로. PDF는 연 파일을 고치거나 저장하지 않아 뺀다.
+  // 순서는 UI 디자인과 같게 [딸깍 AI] [기록] [코멘트]
+  // 기록은 모든 편집기에(2026-11-20 헤더 정리). PDF는 파일을 연 뒤부터: 고쳐서 저장한 상태가 쌓인다(목업은 빈 목록)
+  const hasHistory = kind !== "pdf" || !!active.pdfName;
+  // 여는 중 화면(2026-11-20): 실제로는 오픈소스 에디터를 불러오는 동안. 목업은 잠깐 보여 준다
+  const [booting, setBooting] = useState(true);
+  useEffect(() => { const t = window.setTimeout(() => setBooting(false), 1100); return () => window.clearTimeout(t); }, []);
+  const embedded = kind === "hangul" || kind === "word" || kind === "excel" || kind === "ppt";
+
+  // ── 시작 튜토리얼 2, 3단계(한글, docs/starter-tour.md) ──
+  const starter = useStarterPhase();
+  const tour = kind === "hangul" && (starter === "template" || starter === "ai" || starter === "ai-wait");
+  // 들어오면 템플릿 패널과 딸깍 AI 패널을 연다
+  useEffect(() => { if (tour) { setTemplatesOpen(true); setDock("ai"); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tour]);
+  // 템플릿이 문서에 들어가면 3단계
+  useEffect(() => { if (getStarterPhase() === "template" && kind === "hangul" && active.templateId) { setStarterPhase("ai"); track("starter_step_view", { step: 3 }); } }, [active.templateId, kind]);
+  // 3단계: 입력창에 요청을 대신 타이핑해 두고(실제로 해 보는 것처럼), 사용자가 [보내기]를 누르면 말풍선을 걷고 AI가 쓰는 걸 보여 준다
+  // (2026-11-20 사용자 "이렇게 시켜 보세요 강조보다 채팅창에 '…만들어 줘'를 실제로 해 보는 것처럼")
+  useEffect(() => {
+    if (starter !== "ai" || kind !== "hangul") return;
+    const tpl = DOC_TEMPLATES.find((t) => t.id === active.templateId);
+    const text = tpl ? `${tpl.title} 내용을 채워 줘` : "행사 개최 알림 공문 써 줘";
+    let i = 0;
+    const t = window.setInterval(() => { i += 1; setPrefill({ text: text.slice(0, i), key: Date.now() }); if (i >= text.length) window.clearInterval(t); }, 55);
+    const isSend = (el: Element | null) => !!el?.closest?.('[data-onboarding="ai-composer"] button[aria-label="보내기"]');
+    const click = (e: MouseEvent) => { if (isSend(e.target as Element)) setStarterPhase("ai-wait"); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Enter" && !e.shiftKey && (e.target as Element)?.closest?.('[data-onboarding="ai-composer"]')) setStarterPhase("ai-wait"); };
+    document.addEventListener("click", click, true); document.addEventListener("keydown", key, true);
+    return () => { window.clearInterval(t); document.removeEventListener("click", click, true); document.removeEventListener("keydown", key, true); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [starter, kind]);
+  const finishStarter = (done: boolean) => {
+    track(done ? "starter_complete" : "starter_skip", { step: getStarterPhase() === "template" ? 2 : 3 });
+    setStarterPhase(null); markHintSeen("templates"); markHintSeen("ai");
+    if (done) showToast("준비 끝! 함께 고치려면 오른쪽 위 공유를 눌러요.");
+  };
+  // AI 결과가 문서에 들어가면 끝
+  useEffect(() => { if ((getStarterPhase() === "ai" || getStarterPhase() === "ai-wait") && kind === "hangul" && active.ai) finishStarter(true); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [active.ai, kind]);
+  // 편집기를 닫으면 튜토리얼도 끝
+  useEffect(() => () => { const p = getStarterPhase(); if (p === "template" || p === "ai" || p === "ai-wait") setStarterPhase(null); }, []);
+  // 건너뛴 사람용 파란 점(튜토리얼 중에는 숨김)
+  const tplHint = useHintVisible("templates") && !tour && kind !== "pdf";
+  const aiHint = useHintVisible("ai") && !tour;
+  const coachBtn = { height: 36, padding: "0 14px", fontSize: 13 } as const;
+  const starterCoach = !tour || booting ? null : starter === "template" ? (!preview && (
+    <Coachmark target='[data-onboarding="tpl-panel"]' placement="right" step={2} total={STARTER_TOTAL}
+      pulse='[data-onboarding="tpl-panel"] button[aria-label$="미리보기"] > span:first-child'
+      title="필요한 양식은 여기서 바로 써요" body="공문, 신청서처럼 정해진 양식을 누르면 문서에 바로 들어가요. 하나 눌러 볼까요?"
+      onSkip={() => finishStarter(false)}
+      actions={<Button variant="secondary" size="md" onClick={() => { setStarterPhase("ai"); track("starter_step_view", { step: 3, via: "next" }); }} style={coachBtn}>다음</Button>} />
+  )) : starter === "ai" ? (
+    <Coachmark target='[data-onboarding="ai-composer"]' placement="top" step={3} total={STARTER_TOTAL}
+      pulse='[data-onboarding="ai-composer"] button[aria-label="보내기"]'
+      title="말로만 해도 채워 줘요" body="딸깍 AI에게 하고 싶은 걸 적으면 문서를 대신 써 줘요. 보내기를 눌러 보세요."
+      onSkip={() => finishStarter(false)}
+      actions={<Button variant="secondary" size="md" onClick={() => finishStarter(false)} style={coachBtn}>끝내기</Button>} />
+  ) : null;
+  const pdfOpen = kind === "pdf" && !!active.pdfName && !!pdfUrls.current[activeId];
   const dockTabs = [
-    { id: "ai", label: "딸깍 AI", hint: `딸깍 AI 열기/닫기 (${AI_SHORTCUT})`, icon: Sparkles, dot: aiDot && dock !== "ai", emphasized: true },
-    { id: "comments", label: "코멘트", hint: unread ? `코멘트: 문서를 클릭해 남기기 · 목록 (읽지 않음 ${unread})` : "코멘트: 문서를 클릭해 남기기 · 목록", icon: MessageCircle, badge: unread },
-    { id: "history", label: "기록", hint: "기록: 이전 버전 보기·되돌리기", icon: History },
+    { id: "ai", label: "딸깍 AI", hint: aiHint ? "어려우면 딸깍 AI에게 말로만 하세요" : `딸깍 AI 열기/닫기 (${AI_SHORTCUT})`, icon: Sparkles, dot: (aiDot && dock !== "ai") || aiHint, emphasized: true },
+    { id: "comments", label: "코멘트", hint: unread ? `코멘트 (${COMMENT_SHORTCUT}): 문서를 클릭해 남기기 · 목록 · 읽지 않음 ${unread}` : `코멘트 (${COMMENT_SHORTCUT}): 문서를 클릭해 남기기 · 목록`, icon: MessageCircle, badge: unread },
+    { id: "history", label: "버전 기록", hint: "버전 기록: 이전 상태를 보고 되돌려요", icon: History },
   ];
+  const dockOrder = ["ai", ...(hasHistory ? ["history"] : []), ...(hasComments ? ["comments"] : [])];
   const commentsPanel = (
     <CommentListPanel
       threads={threads}
       me={me}
-      location={() => conf.place}
+      location={(t) => t.place ?? conf.place}
       openThreadId={openThreadId}
       hidden={pinsHidden}
       onToggleHidden={() => setPinsHidden((v) => !v)}
@@ -415,22 +513,32 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
   // 기록(버전) — 영상 편집기(2026-11-19 사용자 "영상은 기록이랑 내보내기만"). UI 디자인과 같은 공통 VersionHistoryPanel
   const historyPanel = (
     <VersionHistoryPanel
-      items={[...(active.versions ?? [])].reverse().map((v) => ({ id: v.id, title: v.named ? v.title : v.by === "ai" ? `딸깍 AI 작업 전: ${v.title}` : v.title, at: v.at, author: v.by === "ai" ? "ai" as const : me, named: v.named }))}
+      currentId={active.curId}
+      // 기록이 아직 없으면(새 파일 · 예전 방식으로 저장된 파일) 지금 상태를 한 줄로 보여 준다. 빈 목록이면 고장 난 것처럼 보였다(2026-11-20 사용자)
+      items={[...(active.hist?.length ? active.hist : [{ id: `now-${active.id}`, at: active.updatedAt, title: isEmpty(active) ? "새로 만듦" : active.cause ?? versionTitle(active), author: active.causeBy === "ai" ? "딸깍 AI" : me.name, snap: { name: active.name, templateId: active.templateId, ai: active.ai } }])].reverse().filter((v) => !v.title.endsWith("버전으로 되돌림")).map((v) => ({ id: v.id, title: v.title, at: v.at, author: v.author, saved: v.saved, savedName: v.savedName }))}
+      emptyText={kind === "pdf" ? "PDF를 고치고 저장하면 그때마다 여기에 남아요." : undefined}
       selectedId={versionSel}
       onSelect={setVersionSel}
-      renderPreview={(id) => {
-        const v = active.versions?.find((x) => x.id === id);
-        const t = v?.snap.templateId ? DOC_TEMPLATES.find((x) => x.id === v.snap.templateId) : undefined;
-        return t ? <PaperThumb template={t} /> : <div style={{ ...f, padding: 12, fontSize: editorType.caption, color: "#64748b", background: "#f8fafc" }}>{v?.snap.ai ? `${v.snap.ai.title} · 장면 ${v.snap.ai.sections.length}개` : "빈 프로젝트"}</div>;
-      }}
       onRestore={(id) => {
-        const v = active.versions?.find((x) => x.id === id);
+        const v = active.hist?.find((x) => x.id === id);
         if (!v) return;
-        patch(activeId, { templateId: v.snap.templateId, ai: v.snap.ai, name: v.snap.name });
+        patch(activeId, { templateId: v.snap.templateId, ai: v.snap.ai, name: v.snap.name, cause: v.title, causeBy: "restore", curId: v.id });
         setVersionSel(null);
-        showToast("이 버전으로 되돌렸어요. 되돌리기 전 상태도 기록에 남아 있어요.");
+        // 되돌린 뒤에는 딸깍 AI 대화로 넘어간다(사용자 2026-11-20): 되돌린 다음 할 일은 대개 AI에게 다시 시키는 것. 기록은 🕘로 언제든 다시 연다
+        setDock("ai");
+        showToast("이 버전으로 되돌렸어요. 다른 버전도 그대로 남아 있어요.");
       }}
-      onSaveNamed={(name) => setDocs((l) => l.map((d) => (d.id === activeId ? { ...d, versions: [...(d.versions ?? []), { ...snapshot(d, "me"), title: name, named: true }].slice(-30) } : d)))}
+      onSaveNow={(name) => {
+        // 지금 상태인 줄에 "남긴 버전" 표시와 이름을 붙인다. 아직 기록이 없으면 지금 상태를 새로 남긴다
+        setDocs((l) => l.map((d) => {
+          if (d.id !== activeId) return d;
+          const h = d.hist ?? [];
+          const cur = h.find((v) => v.id === d.curId) ?? h[h.length - 1];
+          const marked = { saved: true, savedName: name || undefined };
+          return { ...d, hist: cur ? h.map((v) => (v === cur ? { ...v, ...marked } : v)) : [{ id: newId(), at: Date.now(), title: isEmpty(d) ? "새로 만듦" : d.cause ?? versionTitle(d), author: me.name, snap: { name: d.name, templateId: d.templateId, ai: d.ai }, ...marked }] };
+        }));
+        showToast(name ? `"${name}" 버전으로 남겼어요.` : "지금 상태를 남겼어요.");
+      }}
       onClose={() => setDock(null)}
     />
   );
@@ -468,21 +576,35 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
         appName={appName(kind)}
         currentAppId={conf.appId}
         onSwitchApp={onSwitchApp}
+        saveState={saveState}
         fileName={kind === "pdf" && !active.pdfName ? undefined : `${active.name}.${conf.ext}`}
         onRenameFile={(name) => patch(activeId, { name: name.replace(new RegExp(`\\.${conf.ext}$`), "") })}
         // 저장 상태는 안쪽 오픈소스 에디터가 보여 준다(워드 "저장되지 않음"·자동 저장) — 헤더에 또 두지 않는다
         // 영상: 공유 없음 → 내보내기가 주요 버튼(헤더 규칙 "4"). 나머지: 공유
-        capabilities={kind === "video" ? { export: true } : kind === "ppt" ? { share: true, present: true } : { share: true }}
-        exportOptions={kind === "video" ? {
+        // ▷ 발표는 뺐다(2026-11-20): 실제 PPT 에디터 안에 [발표] 버튼이 있어 겹친다. UI 디자인은 자체 에디터라 유지
+        // 다운로드는 넣지 않는다(2026-11-20 사용자 "문서에 다운로드가 필요 없구나"): 안쪽 에디터 파일 메뉴에 저장 · 내려받기가 있다
+        // 이미지: [다운로드](테두리) + [공유](채움)(2026-11-20 사용자 "안쪽 내보내기가 거슬린다, 상단에 다운받기?"). 안쪽 파란 [내보내기]는 뺐다
+        capabilities={kind === "video" ? { export: true } : kind === "image" ? { export: true, share: true } : { share: true }}
+        exportLabel={kind === "image" ? "다운로드" : undefined}
+        exportOptions={kind === "image" ? {
+          title: "이미지 다운로드",
+          groups: [
+            { id: "format", label: "파일 형식", type: "radio", default: "png", options: [{ id: "png", label: "PNG", hint: "선명하고 배경을 투명하게 둘 수 있어요" }, { id: "jpg", label: "JPG", hint: "파일이 작아요" }, { id: "pdf", label: "PDF", hint: "인쇄할 때 좋아요" }] },
+            { id: "scale", label: "크기", type: "radio", default: "1", options: [{ id: "1", label: "1배", hint: "1080 × 1080" }, { id: "2", label: "2배", hint: "2160 × 2160, 더 선명해요" }] },
+            // dev 다운로드 창의 "페이지 선택"(모든 페이지 1~N). 아래 페이지 줄에 여러 장을 둘 수 있어서 필요하다
+            { id: "pages", label: "페이지 선택", type: "radio", default: "all", options: [{ id: "all", label: "모든 페이지 (1~1)" }, { id: "current", label: "지금 보는 페이지" }] },
+          ],
+          onExport: (c) => showToast(`${c.pages === "current" ? "지금 페이지를 " : "모든 페이지를 "}${String(c.format).toUpperCase()} 파일 ${c.scale}배 크기로 내려받을게요.`),
+        } : kind === "video" ? {
           title: "영상 내보내기",
           groups: [
-            { id: "format", label: "형식", type: "radio", default: "mp4", options: [{ id: "mp4", label: "MP4 (H.264)", hint: "어디서나 잘 열려요" }, { id: "webm", label: "WebM (VP9)", hint: "파일이 더 작아요" }] },
-            { id: "quality", label: "품질", type: "radio", default: "high", options: [{ id: "low", label: "낮음", hint: "파일이 가장 작아요" }, { id: "mid", label: "보통" }, { id: "high", label: "높음", hint: "추천" }, { id: "max", label: "매우 높음", hint: "파일이 가장 커요" }] },
+            { id: "format", label: "파일 형식", type: "radio", default: "mp4", options: [{ id: "mp4", label: "MP4 (H.264)", hint: "어디서나 잘 열려요" }, { id: "webm", label: "WebM (VP9)", hint: "파일이 더 작아요" }] },
+            { id: "quality", label: "품질", type: "radio", default: "high", options: [{ id: "low", label: "낮음", hint: "파일이 가장 작아요" }, { id: "mid", label: "보통" }, { id: "high", label: "높음", hint: "추천해요. 선명하고 파일 크기도 알맞아요" }, { id: "max", label: "매우 높음", hint: "파일이 가장 커요" }] },
             { id: "audio", label: "오디오", type: "check", default: true, options: [{ id: "audio", label: "오디오 포함" }] },
           ],
-          onExport: (c) => showToast(`${c.format === "webm" ? "WebM" : "MP4"} 파일, 품질 ${({ low: "낮음", mid: "보통", high: "높음", max: "매우 높음" } as Record<string, string>)[String(c.quality)]}${c.audio ? "" : ", 오디오 없이"} 내보낼게요(목업).`),
+          onExport: (c) => showToast(`${c.format === "webm" ? "WebM" : "MP4"} 파일, 품질 ${({ low: "낮음", mid: "보통", high: "높음", max: "매우 높음" } as Record<string, string>)[String(c.quality)]}${c.audio ? "" : ", 오디오 없이"} 내보낼게요.`),
         } : undefined}
-        presentOptions={PRESENT[kind].map((o) => ({ ...o, run: () => showToast(`${o.label}: 실제로는 안쪽 에디터의 같은 화면으로 이어져요(목업).`) }))}
+        presentOptions={PRESENT[kind].map((o) => ({ ...o, run: () => showToast(`${o.label} 화면은 준비 중이에요.`) }))}
         viewers={viewers}
         profileMenu={profileMenu}
         onBack={onBack}
@@ -496,22 +618,23 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
             <FileUp size={20} /><HeaderLabel text="열기" />
           </button></IconTooltip>
         ) : (
-          <IconTooltip label={templatesOpen ? "템플릿 닫기" : "템플릿 열기"}><button
-            type="button" aria-pressed={templatesOpen} onClick={() => setTemplatesOpen(!templatesOpen)}
-            className="h-10 px-3 flex items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff] hover:bg-black/[0.05]"
+          <IconTooltip label={tplHint ? "정해진 양식이 필요하면 여기서 골라요" : templatesOpen ? "템플릿 닫기" : "템플릿 열기"}><button
+            type="button" aria-pressed={templatesOpen} onClick={() => { markHintSeen("templates"); setTemplatesOpen(!templatesOpen); }}
+            className="relative h-10 px-3 flex items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff] hover:bg-black/[0.05]"
             style={{ fontSize: editorType.body, fontWeight: 500, color: templatesOpen ? color.brand : "#334155", background: templatesOpen ? color.surface.accent : "#fff", boxShadow: templatesOpen ? `inset 0 0 0 1px ${color.brand}` : "inset 0 0 0 1px #e2e8f0" }}
           >
             <LayoutGrid size={20} color={templatesOpen ? color.brand : "#475569"} /><HeaderLabel text="템플릿" />
+            {tplHint && <span aria-hidden className="hint-dot absolute -top-0.5 -right-0.5 size-2.5 rounded-full" style={{ background: color.brand, boxShadow: "0 0 0 2px #fff" }} />}
           </button></IconTooltip>
         )}
-        actions={<DockButtons tabs={hasComments ? dockTabs.filter((t) => t.id !== "history") : dockTabs.filter((t) => t.id !== "comments")} active={dock} onChange={(id) => { setDock(id as "ai" | "comments" | "history" | null); setAiDot(false); setOpenThreadId(null); if (id === "comments") setPinsHidden(false); }} />}
+        actions={<DockButtons tabs={dockOrder.map((id) => dockTabs.find((t) => t.id === id)!)} active={dock} onChange={(id) => { if (id === "ai") markHintSeen("ai"); setDock(id as "ai" | "comments" | "history" | null); setAiDot(false); setOpenThreadId(null); if (id === "comments") setPinsHidden(false); }} />}
       />
 
       {/* 파일 탭 줄 없음(2026-11-19): 한글·워드·엑셀·PPT·PDF·영상·이미지는 한 화면에 파일 하나(dev 편집기와 같음). 다른 파일은 왼쪽 사이드바 레일 "최근 작업"·"내 작업"에서, 새 파일은 템플릿 패널 "빈 문서"에서. 여러 파일 탭은 UI 디자인만 */}
 
       <div className="flex-1 min-h-0 flex" style={{ borderTop: "1px solid #eef0f3" }}>
         {/* 왼쪽 템플릿(PDF는 없음) */}
-        {kind !== "pdf" && <div className="relative shrink-0 h-full overflow-hidden" style={{ width: templatesOpen ? tplPanel.width : 0, borderRight: templatesOpen ? "1px solid #eef0f3" : undefined, transition: tplPanel.dragging ? "none" : "width 200ms cubic-bezier(0.4, 0, 0.2, 1)" }}>
+        {kind !== "pdf" && <div data-onboarding="tpl-panel" className="relative shrink-0 h-full overflow-hidden" style={{ width: templatesOpen ? tplPanel.width : 0, borderRight: templatesOpen ? "1px solid #eef0f3" : undefined, transition: tplPanel.dragging ? "none" : "width 200ms cubic-bezier(0.4, 0, 0.2, 1)" }}>
           {templatesOpen && <PanelResizeHandle side="right" panel={tplPanel} label="템플릿 패널 너비 조절" />}
           <TemplatePanel
             width={tplPanel.width}
@@ -524,9 +647,42 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
         </div>}
 
         {/* 가운데: 오픈소스 에디터 자리(목업) */}
-        <main className="flex-1 min-w-0 flex flex-col bg-[#e9ebef]" aria-label="문서 편집 영역">
-          <MockToolbar kind={kind} />
-          <div className="flex-1 overflow-auto ui-scroll py-8 px-6">
+        <main className="relative flex-1 min-w-0 flex flex-col bg-[#e9ebef]" aria-label="문서 편집 영역">
+          {/* 2026-11-20: 한글 · 워드 · 엑셀 · PPT · PDF는 dev 캡처의 실제 에디터 모양(EmbeddedChrome, 동작 없음). 영상 · 이미지는 기존 도구 모음 */}
+          {kind === "pdf" ? <PdfTop /> : embedded ? <EmbeddedTop kind={kind} title={active.name} /> : kind === "image" || kind === "video" ? null : <MockToolbar kind={kind} />}
+          {booting && <EditorLoading title={LOADING_TITLE[kind]} sub={kind === "video" ? "처음 한 번만 내려받아요. 다음부터는 바로 열려요." : undefined} />}
+          <input ref={pdfInput} type="file" accept="application/pdf,.pdf" className="sr-only" tabIndex={-1} onChange={(e) => { openPdf(e.target.files?.[0]); e.target.value = ""; }} />
+          {kind === "pdf" && !pdfOpen ? <PdfHome onPick={() => pdfInput.current?.click()} onDrop={openPdf} /> : kind === "video" ? (
+            // 영상 편집기: dev 캡처 모양(VideoEditorFrame). 미리보기 안에 템플릿 표지 · AI 결과 제목, 타임라인에 장면
+            <VideoEditorFrame
+              tall={!!(active.ai || tpl)}
+              scenes={active.ai?.sections.map((x) => x.heading) ?? tpl?.sections ?? []}
+              preview={!active.ai && tpl?.cover ? <img src={tpl.cover} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
+                : (active.ai?.title ?? tpl?.title) ? <div className="absolute inset-0 flex items-center justify-center text-center" style={{ padding: "0 10%" }}><p style={{ fontSize: 20, fontWeight: 900, color: "#fff", wordBreak: "keep-all" }}>{active.ai?.title ?? tpl?.title}</p></div>
+                : null}
+            />
+          ) : kind === "image" ? (
+            // 이미지 편집기: dev 캡처 모양(왼쪽 도구 · 눈금자 · 체크무늬 · 오른쪽 디자인 패널 · 아래 페이지 줄) 안에 캔버스
+            <ImageEditorFrame>
+              <div className="relative mx-auto bg-white" style={{ width: "100%", aspectRatio: "1 / 1", boxShadow: "0 1px 3px rgba(15,23,42,0.08), 0 0 0 1px #e2e8f0" }} aria-label="캔버스">
+                {!active.ai && tpl?.cover ? <img src={tpl.cover} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
+                  : !active.ai && tpl ? <PaperThumb template={tpl} scale={4.2} />
+                  : active.ai ? (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center" style={{ background: "linear-gradient(135deg, #fde68a 0%, #fca5a5 100%)", padding: "0 10%" }}>
+                      <p style={{ fontSize: 34, fontWeight: 900, color: "#111827", lineHeight: 1.2, wordBreak: "keep-all" }}>{active.ai.title}</p>
+                      <p style={{ fontSize: editorType.body, color: "#475569", marginTop: 12 }}>목업: 실제 서비스에서는 딸깍 AI가 이미지를 만들어요</p>
+                    </div>
+                  ) : null}
+                <DocCommentLayer
+                  key={activeId}
+                  threads={threads} setThreads={setThreads} me={me} members={members} anchorLabel={conf.place}
+                  commentMode={commentMode} exitCommentMode={() => setDock(null)}
+                  openThreadId={openThreadId} setOpenThreadId={setOpenThreadId} pinsHidden={pinsHidden}
+                />
+              </div>
+            </ImageEditorFrame>
+          ) : (
+          <div className="flex-1 overflow-auto ui-scroll py-8 px-6" style={{ background: kind === "hangul" ? "#e6e6e6" : kind === "ppt" ? "#f1f1f1" : kind === "excel" ? "#fff" : undefined, padding: kind === "excel" ? 0 : undefined }}>
             {commentMode && (
               <div className="sticky top-0 z-20 flex justify-center pointer-events-none" style={{ marginTop: -20, marginBottom: 4 }}>
                 <span className="rounded-full px-3 py-1.5" style={{ fontSize: 12, fontWeight: 600, color: "#fff", background: "#111827" }}>코멘트 모드: 남길 자리를 클릭하세요 · Esc로 나가기</span>
@@ -558,36 +714,12 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
                   openThreadId={openThreadId} setOpenThreadId={setOpenThreadId} pinsHidden={pinsHidden}
                 />
               </div>
-            ) : (
-              <PdfStart onPick={() => pdfInput.current?.click()} onDrop={openPdf} />
-            ))}
-            <input ref={pdfInput} type="file" accept="application/pdf,.pdf" className="sr-only" tabIndex={-1} onChange={(e) => { openPdf(e.target.files?.[0]); e.target.value = ""; }} />
-            {kind === "video" && (
-              <VideoMock title={active.ai?.title ?? tpl?.title} scenes={active.ai?.sections.map((x) => x.heading) ?? tpl?.sections} cover={!active.ai ? tpl?.cover : undefined} />
-            )}
-            {kind === "image" && (
-              <div className="relative mx-auto bg-white" style={{ width: "min(100%, 560px)", aspectRatio: "1 / 1", boxShadow: "0 1px 3px rgba(15,23,42,0.08), 0 0 0 1px #e2e8f0" }} aria-label="캔버스">
-                {!active.ai && tpl?.cover ? <img src={tpl.cover} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
-                  : !active.ai && tpl ? <PaperThumb template={tpl} scale={4.2} />
-                  : active.ai ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center" style={{ background: "linear-gradient(135deg, #fde68a 0%, #fca5a5 100%)", padding: "0 10%" }}>
-                      <p style={{ fontSize: 34, fontWeight: 900, color: "#111827", lineHeight: 1.2, wordBreak: "keep-all" }}>{active.ai.title}</p>
-                      <p style={{ fontSize: editorType.body, color: "#475569", marginTop: 12 }}>목업: 실제 서비스에서는 딸깍 AI가 이미지를 만들어요</p>
-                    </div>
-                  ) : null}
-                <DocCommentLayer
-                  key={activeId}
-                  threads={threads} setThreads={setThreads} me={me} members={members} anchorLabel={conf.place}
-                  commentMode={commentMode} exitCommentMode={() => setDock(null)}
-                  openThreadId={openThreadId} setOpenThreadId={setOpenThreadId} pinsHidden={pinsHidden}
-                />
-              </div>
-            )}
-            {kind === "ppt" || kind === "pdf" || kind === "video" || kind === "image" ? null : kind === "excel" ? (
-              <div className="relative mx-auto bg-white" style={{ width: "min(100%, 980px)", boxShadow: "0 0 0 1px #e2e8f0" }}>
+            ) : null)}
+            {kind === "ppt" || kind === "pdf" ? null : kind === "excel" ? (
+              <div className="relative bg-white" style={{ width: "100%" }}>
                 <SheetMock title={active.ai?.title ?? tpl?.title} cols={active.ai?.sections.map((x) => x.heading) ?? tpl?.sections} />
                 <DocCommentLayer
-                  key={activeId}
+                  key={activeId} snap={snapToSheetCell}
                   threads={threads} setThreads={setThreads} me={me} members={members} anchorLabel={conf.place}
                   commentMode={commentMode} exitCommentMode={() => setDock(null)}
                   openThreadId={openThreadId} setOpenThreadId={setOpenThreadId} pinsHidden={pinsHidden}
@@ -619,15 +751,19 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
             </div>
             )}
           </div>
+          )}
+          {embedded && <EmbeddedStatus kind={kind} />}
         </main>
 
-        <SideDock rail={false} active={dock} onChange={(id) => setDock(id as "ai" | "comments" | "history" | null)} tabs={hasComments ? [{ ...dockTabs[0], panel: aiPanel }, { ...dockTabs[1], panel: commentsPanel }] : [{ ...dockTabs[0], panel: aiPanel }, { ...dockTabs[2], panel: historyPanel }]} />
+        <SideDock rail={false} active={dock} onChange={(id) => setDock(id as "ai" | "comments" | "history" | null)} tabs={dockOrder.map((id) => ({ ...dockTabs.find((t) => t.id === id)!, panel: id === "ai" ? aiPanel : id === "history" ? historyPanel : commentsPanel }))} />
       </div>
 
+      {starterCoach}
       {preview && (
         <TemplatePreview
           template={preview}
           docHasContent={!isEmpty(active)}
+          guide={tour && starter === "template"}
           onApply={(o) => applyTemplate(preview, o)}
           onClose={() => setPreview(null)}
         />
@@ -651,7 +787,7 @@ function SheetMock({ title, cols }: { title?: string; cols?: string[] }) {
             const head = r === 2 && cols ? cols[c] : undefined;
             const isTitle = r === 0 && c === 0 && title;
             return (
-              <div key={l} className="flex items-center overflow-visible whitespace-nowrap" style={{ ...cell, background: head ? "#e7f3ec" : undefined, fontWeight: head || isTitle ? 700 : 400, color: head ? "#166534" : "#111827", fontSize: isTitle ? 14 : 12, outline: r === 0 && c === 0 && !title ? "2px solid #16a34a" : undefined, outlineOffset: -2 }}>
+              <div key={l} data-cell={`${l}${r + 1}`} className="flex items-center overflow-visible whitespace-nowrap" style={{ ...cell, background: head ? "#e7f3ec" : undefined, fontWeight: head || isTitle ? 700 : 400, color: head ? "#166534" : "#111827", fontSize: isTitle ? 14 : 12, outline: r === 0 && c === 0 && !title ? "2px solid #16a34a" : undefined, outlineOffset: -2 }}>
                 {isTitle ? title : head ?? ""}
               </div>
             );
@@ -671,7 +807,7 @@ function SlideMock({ title, slides, cover, tpl, children }: { title?: string; sl
         {list.map((name, i) => (
           <li key={`${name}${i}`} className="flex gap-1.5">
             <span style={{ fontSize: 11, color: "#64748b", width: 14, textAlign: "right" }}>{i + 1}</span>
-            <span className="flex-1 flex items-center justify-center bg-white rounded" style={{ aspectRatio: "16 / 9", boxShadow: i === 0 ? "0 0 0 2px #4f7bff" : "0 0 0 1px #e2e8f0", fontSize: 9.5, color: "#475569", padding: 4, textAlign: "center", overflow: "hidden" }}>
+            <span className="flex-1 flex items-center justify-center bg-white rounded" style={{ aspectRatio: "16 / 9", boxShadow: i === 0 ? "0 0 0 2px #d4622b" : "0 0 0 1px #e2e8f0", fontSize: 9.5, color: "#475569", padding: 4, textAlign: "center", overflow: "hidden" }}>
               {i === 0 && title ? title : name}
             </span>
           </li>
@@ -702,45 +838,3 @@ function SlideNotes() {
   return <div className="mx-auto mt-4 rounded bg-white" style={{ ...f, maxWidth: 1080, padding: "12px 14px", fontSize: 12.5, color: "#94a3b8", boxShadow: "0 0 0 1px #e2e8f0" }}>클릭하여 노트 추가</div>;
 }
 
-/** PDF 시작 화면 — 템플릿 대신 "파일 열기"가 첫 행동(끌어다 놓아도 된다) */
-function PdfStart({ onPick, onDrop }: { onPick: () => void; onDrop: (f: File | undefined) => void }) {
-  const [over, setOver] = useState(false);
-  return (
-    <div
-      className="mx-auto flex flex-col items-center justify-center text-center rounded-2xl"
-      style={{ ...f, width: "min(100%, 640px)", minHeight: 360, marginTop: 40, background: over ? "#eef4ff" : "#fff", border: `2px dashed ${over ? "#4f7bff" : "#cbd5e1"}` }}
-      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => { e.preventDefault(); setOver(false); onDrop(e.dataTransfer.files?.[0]); }}
-    >
-      <img src={artPdf} alt="" className="size-16 object-contain" />
-      <p style={{ fontSize: 17, fontWeight: 800, color: "#111827", marginTop: 14 }}>고칠 PDF를 열어 주세요</p>
-      <p style={{ fontSize: editorType.body, color: "#64748b", marginTop: 6 }}>여기에 끌어다 놓거나 버튼을 눌러 고르세요. 열면 딸깍 AI에게 요약·번역·표 뽑기를 시킬 수 있어요.</p>
-      <button type="button" onClick={onPick} className="mt-5 h-10 px-5 rounded-xl flex items-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff]" style={{ background: "#111827", color: "#fff", fontSize: 13.5, fontWeight: 700 }}>
-        <FileUp size={16} />PDF 파일 열기
-      </button>
-    </div>
-  );
-}
-
-/** 영상 편집 영역 목업 — 미리보기(9:16 또는 검정 화면) + 아래 타임라인(장면 블록) */
-function VideoMock({ title, scenes, cover }: { title?: string; scenes?: string[]; cover?: string }) {
-  const list = scenes?.length ? scenes : [];
-  return (
-    <div className="mx-auto flex flex-col gap-4" style={{ ...f, maxWidth: 1080 }}>
-      <div className="mx-auto relative overflow-hidden rounded-lg" style={{ height: 420, aspectRatio: cover || title ? "9 / 16" : "16 / 9", background: "#000" }} aria-label="미리보기">
-        {cover ? <img src={cover} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
-          : title ? <div className="absolute inset-0 flex items-center justify-center text-center" style={{ padding: "0 10%" }}><p style={{ fontSize: 22, fontWeight: 900, color: "#fff", wordBreak: "keep-all" }}>{title}</p></div>
-          : <div className="absolute inset-0 flex items-center justify-center" style={{ fontSize: editorType.body, color: "#64748b" }}>동영상·사진·오디오를 넣으면 여기에 보여요</div>}
-      </div>
-      <div className="rounded-lg bg-white" style={{ boxShadow: "0 0 0 1px #e2e8f0", padding: "10px 12px" }} aria-label="타임라인">
-        <div className="flex" style={{ fontSize: 11, color: "#94a3b8" }}>{["00:00", "00:05", "00:10", "00:15", "00:20"].map((t) => <span key={t} className="flex-1">{t}</span>)}</div>
-        <div className="flex gap-1 mt-2" style={{ height: 40 }}>
-          {list.length ? list.map((sc, i) => (
-            <span key={`${sc}${i}`} className="flex-1 rounded flex items-center justify-center truncate px-1" style={{ background: ["#dbeafe", "#dcfce7", "#fef3c7", "#fce7f3", "#ede9fe"][i % 5], fontSize: 11, fontWeight: 600, color: "#334155" }}>{sc}</span>
-          )) : <span className="flex-1 rounded flex items-center justify-center" style={{ border: "1.5px dashed #cbd5e1", fontSize: 11.5, color: "#94a3b8" }}>타임라인이 비어 있어요</span>}
-        </div>
-      </div>
-    </div>
-  );
-}

@@ -1,5 +1,5 @@
 import { useContext, createContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronLeft, Cloud, Download, Loader2, Play, Plus } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, Cloud, Download, Loader2, Play, Plus, Bell } from "lucide-react";
 
 import { ProfileMenuButton } from "@/app/components/account/ProfileMenuButton";
 import { color, f, editorType } from "@/app/styleTokens";
@@ -9,6 +9,7 @@ import type { CommentAuthor } from "./comments";
 import { SharePopover } from "./SharePopover";
 import { ExportPopover, type ExportChoice, type ExportGroup } from "./ExportPopover";
 import { IconTooltip } from "@/app/components/viewer/IconTooltip";
+import { showToast } from "@/app/components/common/Toast";
 
 /** 지금 파일을 보고 있는 사람 — activity: "이 탭" · "2분 전 활동" 같은 상태 문구 */
 export interface Viewer extends CommentAuthor { isMe?: boolean; activity: string }
@@ -33,7 +34,7 @@ export type SaveState = { kind: "saved"; at: number } | { kind: "saving" } | { k
 
 /**
  * 딸깍 도구 공통 상단 바(2026-11-19 v3) — 기획: docs/editor-common-header.md.
- *   ① 정체성  : ‹ 나가기 · [아이콘] 앱 이름 ▾(다른 도구로 이동 · 새로 만들기) / 파일 이름(더블클릭 이름 바꾸기) · 저장 상태
+ *   ① 정체성  : ‹ 나가기 · [아이콘] 앱 이름 ▾(다른 도구로 이동 · 새로 만들기) / 파일 이름(한 번 눌러 이름 바꾸기, 확장자는 고치는 칸 밖) · 저장 상태
  *   ② 도구 슬롯: 그 도구에만 있는 핵심 행동 1~2개(toolSlot)
  *   ③ 패널 토글: ✨ AI · 💬 코멘트 · 🕘 기록 아이콘(actions — DockButtons). 오른쪽 패널을 여는 버튼은 오른쪽에
  *   ④ 🔔 알림
@@ -56,7 +57,7 @@ export type ProfileMenuHandlers = Parameters<typeof ProfileMenuButton>[0];
 
 export function EditorHeader({
   appIcon, appName, currentAppId, onSwitchApp, fileName, onRenameFile, location, saveState,
-  capabilities = { share: true, present: true }, presentLabel = "프레젠테이션", onPresent, presentOptions, onExport, exportOptions,
+  capabilities = { share: true, present: true }, presentLabel = "프레젠테이션", onPresent, presentOptions, onExport, exportOptions, exportLabel = "내보내기",
   toolSlot, actions, viewers, onBack, onBell, accent = color.brand, profileMenu,
 }: {
   appIcon: string;
@@ -75,6 +76,8 @@ export function EditorHeader({
   /** ▷▾ 보기 옵션. 없으면 onPresent 하나(presentLabel) */
   presentOptions?: PresentOption[];
   onExport?: () => void;
+  /** [내보내기] 버튼 글자. 이미지는 "다운로드"(결과물이 곧 파일이라 더 바로 와닿는다) */
+  exportLabel?: string;
   /** 있으면 [내보내기]가 설정 팝오버(형식·품질 등)를 연다(2026-11-19, 영상) */
   exportOptions?: { title?: string; groups: ExportGroup[]; onExport: (choice: ExportChoice) => void };
   toolSlot?: ReactNode;
@@ -105,29 +108,50 @@ export function EditorHeader({
     return () => ro.disconnect();
   }, []);
   const iconBtn = "size-10 flex items-center justify-center rounded-md hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]";
+  // 홈 B안(2026-11-20): App이 B안이면 편집기 바꾸기(onSwitchApp)를 넘기지 않는다. 그때만
+  //  · 데스크톱(1200px 이상, 왼쪽 사이드바 줄에 홈이 보일 때)에서는 ‹(홈으로)를 숨긴다(홈 가는 길이 두 개였다, Figma처럼)
+  //  (저장됨 상시 표시는 넣었다가 되돌렸다: 실제 딸깍 문서는 안쪽 오픈소스 에디터 머리에 "자동 저장" · "저장됨"이 이미 있어 두 번 보인다)
+  const planB = !onSwitchApp;
+  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 1200px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1200px)");
+    const on = () => setWide(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
 
   return (
     <HeaderLevelContext.Provider value={level}>
     <header ref={headerRef} className="h-14 shrink-0 flex items-center gap-1 pl-2 pr-3 whitespace-nowrap [&_button]:shrink-0" style={{ ...f, background: "#fff", borderBottom: "1px solid #eef0f3" }}>
       {/* ① 정체성 */}
-      <IconTooltip label="딸깍 홈으로 나가기"><button type="button" aria-label="딸깍 홈으로 나가기" onClick={onBack} className="size-10 flex items-center justify-center rounded-full hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]">
+      {!(planB && wide) && <IconTooltip label="딸깍 홈으로 나가기"><button type="button" aria-label="딸깍 홈으로 나가기" onClick={onBack} className="size-10 flex items-center justify-center rounded-full hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]">
         <ChevronLeft size={20} color="#111827" />
-      </button></IconTooltip>
-      <div className="relative">
-        <button
-          type="button" aria-haspopup="menu" aria-expanded={appMenu} onClick={() => setAppMenu((v) => !v)}
-          className="flex items-center gap-2 rounded-lg pl-2 pr-1 h-10 hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
-          style={{ background: appMenu ? "rgba(0,0,0,0.05)" : undefined }}
-        >
-          <img src={appIcon} alt="" className="size-5 object-contain" />
-          {level < 2 ? <span style={{ fontSize: editorType.large, fontWeight: fileName ? 600 : 700, color: fileName ? "#475569" : "#111827" }}>{appName}</span> : <span className="sr-only">{appName}</span>}
-          <ChevronDown size={13} color="#94a3b8" />
-        </button>
-        {appMenu && <AppSwitcher current={currentAppId} onClose={() => setAppMenu(false)} onSwitch={onSwitchApp} />}
-      </div>
+      </button></IconTooltip>}
+      {onSwitchApp ? (
+        <div className="relative">
+          <button
+            type="button" aria-haspopup="menu" aria-expanded={appMenu} onClick={() => setAppMenu((v) => !v)}
+            className="flex items-center gap-2 rounded-lg pl-2 pr-1 h-10 hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
+            style={{ background: appMenu ? "rgba(0,0,0,0.05)" : undefined }}
+          >
+            <img src={appIcon} alt="" className="size-5 object-contain" />
+            {level < 2 ? <span style={{ fontSize: editorType.large, fontWeight: fileName ? 600 : 700, color: fileName ? "#475569" : "#111827" }}>{appName}</span> : <span className="sr-only">{appName}</span>}
+            <ChevronDown size={13} color="#94a3b8" />
+          </button>
+          {appMenu && <AppSwitcher current={currentAppId} onClose={() => setAppMenu(false)} onSwitch={onSwitchApp} />}
+        </div>
+      ) : (
+        // 홈 B안(2026-11-20): 편집기 바꾸기 ▾를 뺐다(새 파일은 사이드바 ＋ 새로 만들기). 어떤 편집기인지는 아이콘으로만(Google 문서 방식).
+        // 툴팁은 뺐다(사용자 "일러스트 아이콘 툴팁은 없어도 될 듯"): 눌리는 것도 아닌데 이름이 떠서 거슬렸다. 읽는 이름은 alt로
+        // 파일이 없는 화면(UI 디자인 파일 목록)에서는 제목 대신 편집기 이름을 보인다
+        <span className="flex items-center gap-2 pl-1 pr-1 h-10">
+          <img src={appIcon} alt={appName} className="size-6 object-contain" />
+          {!fileName && <span style={{ fontSize: editorType.large, fontWeight: 700, color: "#111827" }}>{appName}</span>}
+        </span>
+      )}
       {fileName && (
         <span className="flex items-center gap-2 min-w-0">
-          <span aria-hidden style={{ color: "#cbd5e1" }}>/</span>
+          {onSwitchApp && <span aria-hidden style={{ color: "#cbd5e1" }}>/</span>}
           <EditableTitle value={fileName} onChange={onRenameFile} />
           {(saveState || location) && <SaveBadge state={saveState} location={location} />}
         </span>
@@ -152,9 +176,9 @@ export function EditorHeader({
             className={`h-10 ${level ? "px-3" : "px-4"} rounded-lg flex items-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#4f7bff]`}
             style={exportPrimary ? { background: accent, color: "#fff", fontSize: editorType.body, fontWeight: 600 } : { background: "#fff", color: "#111827", fontSize: editorType.body, fontWeight: 600, boxShadow: "inset 0 0 0 1px #e2e8f0" }}
           >
-            <Download size={18} />{level < 1 ? "내보내기" : <span className="sr-only">내보내기</span>}
+            <Download size={18} />{level < 1 ? exportLabel : <span className="sr-only">{exportLabel}</span>}
           </button>
-          {exportOptions && exportOpen && <ExportPopover title={exportOptions.title} groups={exportOptions.groups} accent={accent} onClose={() => setExportOpen(false)} onExport={(c) => { setExportOpen(false); exportOptions.onExport(c); }} />}
+          {exportOptions && exportOpen && <ExportPopover title={exportOptions.title} actionLabel={exportLabel} groups={exportOptions.groups} accent={accent} onClose={() => setExportOpen(false)} onExport={(c) => { setExportOpen(false); exportOptions.onExport(c); }} />}
           </div>
         )}
         {fileName && capabilities.share && (
@@ -174,8 +198,9 @@ export function EditorHeader({
         {/* ④ 알림: 내 계정 소식이라 파일 작업 버튼 사이가 아니라 프로필 바로 옆(2026-11-19, Google Docs·Notion·Canva·Figma와 같은 자리) */}
         {onBell && (
           <div className="ml-1"><IconTooltip label="알림"><button type="button" aria-label="알림" onClick={onBell} className="relative size-10 flex items-center justify-center rounded-full hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
-            <span aria-hidden className="absolute top-[8px] right-[9px] size-2 rounded-full bg-[#2b7fff] ring-2 ring-white" />
+            {/* 2026-11-20 점검: 손으로 그린 svg → lucide Bell(다른 아이콘과 같은 세트), 점 색은 브랜드 토큰 */}
+            <Bell size={20} color="#4b5563" strokeWidth={1.7} aria-hidden />
+            <span aria-hidden className="absolute top-[8px] right-[9px] size-2 rounded-full ring-2 ring-white" style={{ background: color.brand }} />
           </button></IconTooltip></div>
         )}
         {profileMenu && <div className="ml-1"><ProfileMenuButton {...profileMenu} /></div>}
@@ -237,13 +262,14 @@ function PresentButton({ options }: { options: PresentOption[] }) {
  * 저장 상태(자동 저장). 2026-11-19 간소화: 평소(저장됨)엔 구름 아이콘만 두고 위치·시각은 툴팁으로.
  * 글자는 저장 중·저장 못 함처럼 알아야 할 때만 보인다(Google Docs·Canva 방식). 예전엔 "임시 보관함 · 저장됨 · 39초 전"이 늘 붙어 있었다.
  */
-function SaveBadge({ state, location }: { state?: SaveState; location?: string }) {
+function SaveBadge({ state, location, showSaved }: { state?: SaveState; location?: string; showSaved?: boolean }) {
   if (state?.kind === "saving") {
     return <span className="shrink-0 inline-flex items-center gap-1 ml-1" style={{ fontSize: editorType.caption, color: "#94a3b8" }} aria-live="polite"><Loader2 size={12} className="animate-spin" />저장 중…</span>;
   }
   if (state?.kind === "error") {
     return <span className="shrink-0 inline-flex items-center gap-1 ml-1" style={{ fontSize: editorType.caption, color: "#b45309" }} aria-live="polite"><Cloud size={12} />저장 못 함: 이 브라우저 저장 공간 부족</span>;
   }
+  if (showSaved) return <span className="shrink-0 inline-flex items-center gap-1 ml-1" style={{ fontSize: editorType.caption, color: "#64748b" }}><Check size={12} />저장됨</span>;
   // 평소(저장됨)에는 아무것도 안 보인다(2026-11-19, 사용자 "클라우드 표시 있어야 하나"). Figma·Canva처럼 자동 저장은 기본이라 표시하지 않고, 저장 중·실패일 때만 글자로 알린다.
   void location;
   return null;
@@ -288,23 +314,61 @@ function AppSwitcher({ current, onClose, onSwitch }: { current?: string; onClose
   );
 }
 
+/**
+ * 상단 파일 이름(2026-11-20 다시 설계, 사용자 "표시 없어도 이름 바꿀 수 있다는 걸 알까").
+ * 마우스를 올리면 점선 밑줄 + 바로 뜨는 "이름 바꾸기" 툴팁(미리캔버스처럼, 테두리 상자 · 연필 아이콘 없이), **한 번 누르면** 바로 고친다(예전: 더블클릭).
+ * 새 파일 기본 이름은 "제목 없는 ○○"이라 바꿔야 할 이름이라는 게 보인다.
+ * 확장자(.mp4 · .hwpx …)는 이름과 같은 색으로 보이되 고치는 칸에서는 뺀다(실수로 지우지 않게). 회색은 사용자 "마음에 안 든다"로 뺐다.
+ * Enter · 바깥 누르기 = 저장("이름을 바꿨어요."), Esc = 취소. 연필 아이콘은 늘 띄우지 않는다(상단 바 버튼이 이미 많다).
+ */
 function EditableTitle({ value, onChange }: { value: string; onChange?: (v: string) => void }) {
+  const m = /^(.*?)(\.[A-Za-z0-9]{2,5})$/.exec(value);
+  const base = m ? m[1] : value;
+  const ext = m ? m[2] : "";
   const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(value);
-  const style = { ...f, fontSize: editorType.large, fontWeight: 700, color: "#111827" } as const;
-  if (!editing || !onChange) {
+  const [text, setText] = useState(base);
+  const closed = useRef(false);
+  const style = { ...f, fontSize: editorType.large, fontWeight: 700, color: "#111827", lineHeight: "20px" } as const;
+  // 보기 · 고치기 두 상태가 같은 상자(높이 · 안쪽 여백 · 둥글기)를 써서, 눌러도 글자가 한 픽셀도 밀리지 않는다(2026-11-20 사용자 "누르면 밀린다").
+  // 테두리는 box-shadow라 크기에 영향이 없다. 점선 밑줄은 글자 위에 겹친 한 줄(absolute)이라 줄 높이를 바꾸지 않는다
+  const BOX = "flex items-center min-w-0 max-w-[260px] !shrink h-8 px-2 -mx-1 rounded-lg";
+  const extEl = ext && <span className="shrink-0" style={style}>{ext}</span>;
+  if (!onChange) return <span className="truncate max-w-[240px] min-w-0" style={style}>{value}</span>;
+  if (!editing) {
     return (
-      <button type="button" title={onChange ? "더블클릭해서 이름 바꾸기" : undefined} onDoubleClick={() => { setText(value); setEditing(true); }} className="truncate max-w-[240px] !shrink min-w-0 text-left rounded px-1 -mx-1 hover:bg-black/[0.04]" style={style}>
-        {value}
-      </button>
+      <IconTooltip label="이름 바꾸기">
+        <button type="button" aria-label={`파일 이름 ${value}, 눌러서 이름 바꾸기`} onClick={() => { setText(base); closed.current = false; setEditing(true); }}
+          className={`group/title ${BOX} text-left outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]`}>
+          {/* 미리캔버스처럼 올리면 점선 밑줄(테두리 상자 · 연필 아이콘 없이) */}
+          {/* 점선은 이름 + 확장자 전체 아래 한 줄(겹친 선). 글자마다 밑줄을 그으면 한글 · 영문 높이가 달라 선이 어긋났다 */}
+          <span className="relative flex min-w-0"><span className="truncate min-w-0" style={style}>{base}</span>{extEl}
+            <span aria-hidden className="absolute left-0 right-0 -bottom-1 border-b border-dashed border-transparent group-hover/title:border-[#94a3b8] transition-colors" />
+          </span>
+        </button>
+      </IconTooltip>
     );
   }
-  const done = () => { onChange(text.trim() || value); setEditing(false); };
+  // Enter 뒤 칸이 사라지며 blur가 한 번 더 와도 두 번 저장하지 않게(closed)
+  const done = () => {
+    if (closed.current) return;
+    closed.current = true;
+    const next = text.trim();
+    setEditing(false);
+    if (next && next !== base) { onChange(next + ext); showToast("이름을 바꿨어요."); }
+  };
   return (
-    <input
-      autoFocus value={text} onChange={(e) => setText(e.target.value)} onBlur={done}
-      onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") done(); if (e.key === "Escape") setEditing(false); }}
-      className="outline-none rounded px-1 -mx-1 w-[200px]" style={{ ...style, boxShadow: "inset 0 0 0 1px #4f7bff" }}
-    />
+    <span className={`${BOX} bg-white`} style={{ boxShadow: "inset 0 0 0 1.5px #4f7bff" }}>
+      {/* 글자 너비만큼만 칸이 늘어나게(보이지 않는 글자 + 같은 칸에 입력) — 확장자가 이름 바로 뒤에 붙는다 */}
+      <span className="inline-grid min-w-0 max-w-[240px]">
+        <span aria-hidden className="invisible whitespace-pre overflow-hidden" style={{ ...style, gridArea: "1 / 1" }}>{text || " "}</span>
+        <input
+          autoFocus value={text} onChange={(e) => setText(e.target.value)} onBlur={done} onFocus={(e) => e.currentTarget.select()}
+          onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") done(); if (e.key === "Escape") { closed.current = true; setEditing(false); } }}
+          aria-label="파일 이름" size={1}
+          className="field-inline outline-none bg-transparent min-w-0 w-full p-0" style={{ ...style, gridArea: "1 / 1" }}
+        />
+      </span>
+      {extEl}
+    </span>
   );
 }

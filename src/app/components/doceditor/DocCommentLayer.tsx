@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type SetStateAction } from "react";
 
 import { showToast } from "@/app/components/common/Toast";
 import { DEMO_MEMBERS, DEMO_TEAMMATE, relTime, type CommentAuthor } from "@/app/components/editor-shell/comments";
@@ -19,7 +19,18 @@ export function useDocCommentMembers(me: CommentAuthor): Member[] {
   return useMemo(() => [{ ...me, email: getProfile().email } as Member, ...DEMO_MEMBERS.filter((x) => x.name !== me.name)], [me]);
 }
 
-export function DocCommentLayer({ threads, setThreads, me, members, anchorLabel = "1쪽", commentMode, exitCommentMode, openThreadId, setOpenThreadId, pinsHidden }: {
+/** 놓은 자리를 다듬는 규칙: 엑셀은 칸 모서리에 붙이고 "Sheet1 · B3"처럼 이름을 준다. null이면 그 자리에 둘 수 없음 */
+export type DocCommentSnap = (layer: HTMLElement, clientX: number, clientY: number) => { x: number; y: number; place?: string } | null;
+
+/** 엑셀 시트 목업용: 포인터 아래 data-cell 칸을 찾아 그 칸 오른쪽 위 모서리에 핀 끝을 붙인다(엑셀 메모 표시 자리) */
+export const snapToSheetCell: DocCommentSnap = (layer, cx, cy) => {
+  const cell = document.elementsFromPoint(cx, cy).find((el) => (el as HTMLElement).dataset?.cell) as HTMLElement | undefined;
+  if (!cell) return null;
+  const r = layer.getBoundingClientRect(), c = cell.getBoundingClientRect();
+  return { x: Math.round(c.right - r.left - 6), y: Math.round(c.top - r.top + 6), place: `Sheet1 · ${cell.dataset.cell}` };
+};
+
+export function DocCommentLayer({ threads, setThreads, me, members, anchorLabel = "1쪽", commentMode, exitCommentMode, openThreadId, setOpenThreadId, pinsHidden, snap }: {
   threads: DocThread[];
   setThreads: (u: SetStateAction<DocThread[]>) => void;
   me: CommentAuthor;
@@ -31,9 +42,13 @@ export function DocCommentLayer({ threads, setThreads, me, members, anchorLabel 
   openThreadId: string | null;
   setOpenThreadId: (id: string | null) => void;
   pinsHidden: boolean;
+  /** 놓은 자리 다듬기(엑셀 칸 붙이기). 없으면 클릭한 점 그대로 */
+  snap?: DocCommentSnap;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [draft, setDraft] = useState<{ x: number; y: number } | null>(null);
+  const [draft, setDraft] = useState<{ x: number; y: number; place?: string } | null>(null);
+  // 핀 옮기기(UI 디자인과 같은 규칙): 3px 넘게 움직이면 옮기기, 아니면 열기. 작성자만 옮길 수 있고 남의 핀은 안내만.
+  const [pinDrag, setPinDrag] = useState<{ id: string; x: number; y: number } | null>(null);
   const [bounds, setBounds] = useState({ w: 680, h: 880 });
   const demoReplied = useRef(threads.length > 0);
   useEffect(() => {
@@ -61,7 +76,7 @@ export function DocCommentLayer({ threads, setThreads, me, members, anchorLabel 
     const now = Date.now();
     const t: DocThread = {
       id: uid("t"), number: threads.reduce((m, x) => Math.max(m, x.number), 0) + 1, pageId: "p1", frameId: null, x: draft.x, y: draft.y,
-      resolved: false, readAt: now, messages: [{ id: uid("m"), author: me, text, createdAt: now, images: images.length ? images : undefined }],
+      place: draft.place, resolved: false, readAt: now, messages: [{ id: uid("m"), author: me, text, createdAt: now, images: images.length ? images : undefined }],
     };
     setThreads((all) => [...all, t]);
     setDraft(null);
@@ -87,7 +102,7 @@ export function DocCommentLayer({ threads, setThreads, me, members, anchorLabel 
       const before = threads;
       setThreads((all) => all.filter((x) => x.id !== t.id));
       setOpenThreadId(null);
-      showToast("스레드를 삭제했어요.", "success", { label: "되돌리기", onClick: () => restore(before) });
+      showToast("코멘트를 삭제했어요.", "success", { label: "되돌리기", onClick: () => restore(before) });
     },
     onEditMsg: (msgId, text) => patch(t.id, (x) => ({ ...x, messages: x.messages.map((m) => (m.id === msgId ? { ...m, text, editedAt: Date.now() } : m)) })),
     onDeleteMsg: (msgId) => {
@@ -107,6 +122,47 @@ export function DocCommentLayer({ threads, setThreads, me, members, anchorLabel 
     onDraft: (text) => patch(t.id, (x) => ({ ...x, myDraft: text.trim() ? text : undefined })),
   });
 
+  const toggleOpen = (t: DocThread) => { setDraft(null); setOpenThreadId(t.id === openThreadId ? null : t.id); if (t.id !== openThreadId) patch(t.id, (x) => ({ ...x, readAt: Date.now(), forcedUnread: false })); };
+  const pressPin = (e: ReactPointerEvent, t: DocThread) => {
+    if (e.clientX === undefined) { toggleOpen(t); return; } // 키보드(Enter/Space)
+    if (e.button !== 0) return;
+    e.preventDefault(); // 글자 선택·기본 끌기가 시작되면 pointercancel로 옮기기가 끊긴다
+    const mine = t.messages[0]?.author.name === me.name;
+    const sx = e.clientX, sy = e.clientY;
+    let moved = false, warned = false, last = { dx: 0, dy: 0 };
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (!moved && Math.hypot(dx, dy) < 3) return;
+      moved = true;
+      if (!mine) { if (!warned) { warned = true; showToast("코멘트는 작성자만 옮길 수 있어요."); } return; }
+      last = { dx, dy };
+      setPinDrag({ id: t.id, x: t.x + dx, y: t.y + dy });
+    };
+    // pointerup이 오지 않는 경우(드래그 중 창 밖에서 놓기 등)에도 끝나도록 mouseup·pointercancel도 받는다(UI 디자인 Canvas와 같음). 한 번만 끝낸다
+    let ended = false;
+    const up = () => {
+      if (ended) return;
+      ended = true;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      window.removeEventListener("mouseup", up);
+      setPinDrag(null);
+      if (!moved) { toggleOpen(t); return; }
+      if (!mine || !ref.current) return;
+      const r = ref.current.getBoundingClientRect();
+      // 쪽 밖으로는 못 나가게 가둔다(핀 끝 기준)
+      let x = Math.min(Math.max(t.x + last.dx, 0), r.width - 4), y = Math.min(Math.max(t.y + last.dy, 32), r.height);
+      let place = t.place;
+      if (snap) { const s = snap(ref.current, r.left + x + 1, r.top + y - 1); if (!s) return; x = s.x; y = s.y; place = s.place; }
+      patch(t.id, (o) => ({ ...o, x, y, place }));
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    window.addEventListener("mouseup", up);
+  };
+
   const open = threads.find((t) => t.id === openThreadId) ?? null;
   return (
     <div ref={ref} className="absolute inset-0" style={{ pointerEvents: commentMode || draft || open ? "auto" : "none", cursor: commentMode ? "crosshair" : undefined }}
@@ -116,18 +172,20 @@ export function DocCommentLayer({ threads, setThreads, me, members, anchorLabel 
         // 빈 곳 mousedown의 기본 동작(포커스를 body로)을 막아야 새 코멘트 입력칸 자동 포커스가 남는다
         e.preventDefault();
         const r = e.currentTarget.getBoundingClientRect();
+        if (snap) { const s = snap(e.currentTarget, e.clientX, e.clientY); if (s) setDraft(s); return; }
         setDraft({ x: Math.round(e.clientX - r.left), y: Math.round(e.clientY - r.top) });
       }}
     >
       {!pinsHidden && threads.filter((t) => !t.resolved || t.id === openThreadId).map((t) => {
         const first = t.messages[0];
+        const d = pinDrag?.id === t.id ? pinDrag : null;
         return (
           <span key={t.id} style={{ pointerEvents: "auto" }}>
             <CommentPin
-              x={t.x} y={t.y} author={first?.author ?? me} number={t.number} active={t.id === openThreadId} resolved={t.resolved}
+              x={d?.x ?? t.x} y={d?.y ?? t.y} dragging={!!d} author={first?.author ?? me} number={t.number} active={t.id === openThreadId} resolved={t.resolved}
               unread={t.messages.some((m) => m.createdAt > t.readAt && m.author.name !== me.name) || !!t.forcedUnread}
               preview={first ? { text: first.text, replies: t.messages.length - 1, time: relTime(first.createdAt) } : undefined}
-              onPress={() => { setDraft(null); setOpenThreadId(t.id === openThreadId ? null : t.id); if (t.id !== openThreadId) patch(t.id, (x) => ({ ...x, readAt: Date.now(), forcedUnread: false })); }}
+              onPress={(e) => pressPin(e, t)}
             />
           </span>
         );
@@ -139,7 +197,7 @@ export function DocCommentLayer({ threads, setThreads, me, members, anchorLabel 
         </>
       )}
       {open && (
-        <ThreadPopover x={open.x} y={open.y} bounds={bounds} thread={open} me={me} members={members} anchorLabel={anchorLabel} draft={open.myDraft ?? ""} actions={actions(open)} />
+        <ThreadPopover x={open.x} y={open.y} bounds={bounds} thread={open} me={me} members={members} anchorLabel={open.place ?? anchorLabel} draft={open.myDraft ?? ""} actions={actions(open)} />
       )}
     </div>
   );
