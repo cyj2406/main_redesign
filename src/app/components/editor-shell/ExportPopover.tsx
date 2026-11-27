@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Download, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Download, X } from "lucide-react";
 
 import { color, editorType, f } from "@/app/styleTokens";
 
@@ -19,7 +19,7 @@ export interface ExportGroup {
 }
 export type ExportChoice = Record<string, string | boolean>;
 
-export function ExportPopover({ title = "내보내기", actionLabel = "내보내기", groups, accent = color.brand, onExport, onClose }: {
+export function ExportPopover({ title = "내보내기", actionLabel = "내보내기", groups, accent = color.brand, onExport, onClose, onShare }: {
   title?: string;
   /** 아래 버튼 글자(이미지는 "다운로드") */
   actionLabel?: string;
@@ -27,6 +27,12 @@ export function ExportPopover({ title = "내보내기", actionLabel = "내보내
   accent?: string;
   onExport: (choice: ExportChoice) => void;
   onClose: () => void;
+  /**
+   * 있으면 맨 아래 "함께 고칠 수도 있어요" 한 줄(2026-11-27). 다운로드는 대개 누군가에게 보내려고 누르니,
+   * 그 순간에 공유와 코멘트가 있다는 걸 알려 준다. 튜토리얼 단계 대신 화면 안에서 알게 하는 장치.
+   * 링크는 초대받은 사람만 열 수 있어 "링크 복사"가 아니라 공유 창을 연다.
+   */
+  onShare?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [choice, setChoice] = useState<ExportChoice>(() => Object.fromEntries(groups.map((g) => [g.id, g.default])));
@@ -72,10 +78,23 @@ export function ExportPopover({ title = "내보내기", actionLabel = "내보내
           );
         })}
       </div>
-      <p className="truncate" style={{ fontSize: editorType.caption, color: "#94a3b8", marginTop: 16 }}>{actionLabel} 정보 · {groups.map(valueLabel).join(" · ")}</p>
+      {/* 요약은 고를 게 여러 개일 때만(2026-11-27): 항목이 하나면 바로 위 칸과 같은 말을 반복할 뿐이다 */}
+      {groups.length > 1 ? <p className="truncate" style={{ fontSize: editorType.caption, color: "#94a3b8", marginTop: 16 }}>{actionLabel} 정보 · {groups.map(valueLabel).join(" · ")}</p> : <div style={{ height: 4 }} />}
       <button type="button" onClick={() => onExport(choice)} className="mt-3 w-full h-12 rounded-xl flex items-center justify-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#4f7bff] hover:brightness-95" style={{ background: accent, color: "#fff", fontSize: editorType.body, fontWeight: 700 }}>
         <Download size={18} />{actionLabel}
       </button>
+      {onShare && (
+        <button
+          type="button" onClick={onShare}
+          className="mt-3 w-full flex items-center gap-2 rounded-xl text-left outline-none hover:bg-[#f1f5f9] focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
+          style={{ background: "#f8fafc", padding: "10px 12px" }}
+        >
+          <span className="min-w-0 flex-1 whitespace-normal" style={{ fontSize: editorType.caption, lineHeight: "18px", color: "#475569", wordBreak: "keep-all" }}>
+            파일 대신 공유하면 받는 사람이 바로 코멘트를 남길 수 있어요
+          </span>
+          <span className="shrink-0 flex items-center" style={{ fontSize: editorType.caption, fontWeight: 700, color: accent }}>공유하기<ChevronRight size={14} /></span>
+        </button>
+      )}
     </div>
   );
 }

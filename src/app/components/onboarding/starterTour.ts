@@ -11,8 +11,10 @@ import { readFlag, writeFlag } from "./onboardingStore";
  * - "home"     : 홈 새로 만들기 줄 위 말풍선([혼자 둘러볼게요] [30초 따라 하기])
  * - "template" : 한글 편집기 왼쪽 템플릿 패널. 템플릿이 문서에 들어가면 다음으로
  * - "ai"       : 오른쪽 딸깍 AI 추천 문장. 하나 누르면 말풍선을 걷고("ai-wait") AI 결과가 나오면 끝
+ * - "share"    : 끝까지 따라 한 사람에게만 마무리 말풍선 하나(단계 수에 안 셈). 상단 [공유]를 가리킨다.
+ *                화면을 어둡게 하지 않아 방금 AI가 쓴 문서가 그대로 보인다. [확인] · 공유 누르기 · Esc로 닫힌다
  */
-export type StarterPhase = null | "home" | "template" | "ai" | "ai-wait";
+export type StarterPhase = null | "home" | "template" | "ai" | "ai-wait" | "share";
 
 let phase: StarterPhase = null;
 const listeners = new Set<() => void>();

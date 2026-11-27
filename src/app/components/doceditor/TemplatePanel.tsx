@@ -9,6 +9,7 @@ import { color, f, editorType } from "@/app/styleTokens";
 import { DOC_CATEGORIES, templatesFor, type DocKind, type DocTemplate } from "./docTemplates";
 import { PaperThumb } from "./PaperThumb";
 import { ChipRow } from "@/app/components/editor-shell/ChipRow";
+import { PanelCloseButton } from "@/app/components/editor-shell/SideDock";
 
 /**
  * 한글·워드 편집기 왼쪽 템플릿 패널(2026-11-19). 기획: docs/doc-editor.md "2-2".
@@ -37,9 +38,7 @@ export function TemplatePanel({ kind, width = 300, onPreview, onBlank, onAskAi, 
       <div className="flex items-center gap-2 shrink-0" style={{ height: 48, padding: "0 8px 0 16px", borderBottom: "1px solid #eef0f3" }}>
         <LayoutGrid size={15} color="#334155" />
         <span style={{ fontSize: editorType.large, fontWeight: 700, color: "#111827" }}>템플릿</span>
-        <IconTooltip label="템플릿 닫기"><button type="button" aria-label="템플릿 닫기" onClick={onClose} className="ml-auto size-8 flex items-center justify-center rounded-md hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]">
-          <X size={15} color="#475569" />
-        </button></IconTooltip>
+        <span className="ml-auto"><PanelCloseButton side="left" label="템플릿 닫기" onClick={onClose} /></span>
       </div>
 
       <div className="shrink-0 px-3 pt-3 pb-2">

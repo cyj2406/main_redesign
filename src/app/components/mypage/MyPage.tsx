@@ -6,7 +6,7 @@ import { InputField } from "@/app/components/common/InputField";
 import { PageContainer, PageHeader } from "@/app/components/common/PageContainer";
 import { showToast } from "@/app/components/common/Toast";
 import { PROFILE_LIMITS, resizeAvatar, updateProfile, useProfile, type Profile } from "@/app/state/profile";
-import { modelLabel, ownModels, useAiModels } from "@/app/state/aiModels";
+import { AGENT_NAME, CLAUDE_MODELS, CODEX_MODELS, activeChatAgent, modelLabel as connModelLabel, useAiConnection } from "@/app/state/aiConnection";
 import { useCreditBalance } from "@/app/state/creditBalance";
 import { findPlan, useSubscription } from "@/app/state/subscription";
 import { color, f, radius, shadow, typography } from "@/app/styleTokens";
@@ -18,7 +18,7 @@ import { josa } from "@/app/copy";
  * 마이페이지(프로필 메뉴 > 마이페이지) — 2026-11-19. 기획: docs/mypage.md.
  * 지금 서비스에 있는 것만 둔다(새로 만들어야 하는 기능은 뺌):
  *   ① 프로필: 사진 · 이름 · 이메일 · 로그인 방법(Google/카카오 표시만)
- *   ② 내 이용 현황: 요금제·크레딧 · AI 모델 → 각 화면 바로 가기(내 작업은 사이드바에 있어 뺐다)
+ *   ② 내 이용 현황: 요금제·크레딧 · AI 연결 → 각 화면 바로 가기(내 작업은 사이드바에 있어 뺐다)
  *   ③ 계정: 계정 삭제 요청(고객센터 안내)
  * 편집 방식: 항목마다 [값 · 수정] 한 줄 → 그 줄만 입력칸. 페이지 전체 "저장" 없음.
  */
@@ -53,11 +53,14 @@ const LOGIN_PROVIDER = { google: { name: "Google", mark: "G", bg: "#fff", fg: "#
 
 export function MyPage({ onOpenPricing, onOpenSettings }: {
   onOpenPricing?: () => void;
-  onOpenSettings?: (tab: "AI 모델") => void;
+  onOpenSettings?: (tab: "AI 연결") => void;
 } = {}) {
   const profile = useProfile();
   const [editing, setEditing] = useState<EditKey | null>(null);
-  const models = useAiModels();
+  // 2026-11-27: 설정 "AI 모델" 탭이 "AI 연결"로 바뀌어 요약도 연결 상태 기준으로
+  const ai = useAiConnection();
+  const chatAgent = activeChatAgent(ai);
+  const aiSummary = chatAgent ? `채팅 ${AGENT_NAME[chatAgent]} · ${chatAgent === "codex" ? connModelLabel(CODEX_MODELS, ai.codexModel) : connModelLabel(CLAUDE_MODELS, ai.claudeModel)}` : "연결된 AI 없음";
   const [credit] = useCreditBalance();
   const sub = useSubscription();
   const plan = findPlan(sub.planId);
@@ -88,7 +91,7 @@ export function MyPage({ onOpenPricing, onOpenSettings }: {
 
         <Card title="내 이용 현황" desc="자세한 관리는 각 화면에서 해요.">
           <LinkRow label="요금제와 크레딧" value={`${hasPlan && plan ? plan.name : "무료"} · 크레딧 ${credit.toLocaleString()}`} action="요금제 및 크레딧" onClick={onOpenPricing} />
-          <LinkRow label="AI 모델" value={`기본 ${modelLabel(models.defaultModel)}${ownModels(models).length ? ` · 내 AI ${ownModels(models).length}개 연결` : ""}`} action="AI 모델 설정" onClick={onOpenSettings && (() => onOpenSettings("AI 모델"))} last />
+          <LinkRow label="AI 연결" value={aiSummary} action="AI 연결 설정" onClick={onOpenSettings && (() => onOpenSettings("AI 연결"))} last />
         </Card>
 
         <Card title="계정">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileUp, LayoutGrid, MessageCircle, Sparkles, History } from "lucide-react";
 
 import { Button } from "@/app/components/common/Button";
@@ -26,7 +26,8 @@ import artPdf from "@/assets/home/editor/pdf.png";
 import artVideo from "@/assets/home/editor/video-edit.png";
 import artImage from "@/assets/home/editor/image.png";
 
-import { DocCommentLayer, snapToSheetCell, useDocCommentMembers, type DocThread } from "./DocCommentLayer";
+import { DocCommentLayer, docThreadActions, snapToSheetCell, useDocCommentMembers, type DocThread } from "./DocCommentLayer";
+import { ThreadPopover } from "@/app/components/uidesign/Comments";
 import { DOC_TEMPLATES, type DocKind, type DocTemplate } from "./docTemplates";
 import { MockToolbar } from "./MockToolbar";
 import { EditorLoading, EmbeddedStatus, EmbeddedTop, ImageEditorFrame, PdfHome, PdfTop, VideoEditorFrame } from "./EmbeddedChrome";
@@ -202,6 +203,14 @@ const STEPS: Record<DocKind, string[]> = {
   image: ["요청 읽기", "구도 잡기", "요소 배치", "캔버스에 넣기"],
 };
 const AI_SHORTCUT = "⌘J";
+/** 문서 편집기 다운로드 형식(2026-11-27). 첫 번째가 기본. PDF는 형식이 하나라 고르는 창 없이 바로 */
+const DOC_FORMATS: Partial<Record<DocKind, { id: string; label: string; hint?: string }[]>> = {
+  // 형식 설명은 뺐다(2026-11-27 사용자 "저런 설명 굳이?"): 문서 형식은 이름만으로 충분하다
+  hangul: [{ id: "hwpx", label: "한글 (HWPX)" }, { id: "hwp", label: "한글 (HWP)" }, { id: "pdf", label: "PDF" }],
+  word: [{ id: "docx", label: "워드 (DOCX)" }, { id: "pdf", label: "PDF" }],
+  excel: [{ id: "xlsx", label: "엑셀 (XLSX)" }, { id: "csv", label: "CSV" }, { id: "pdf", label: "PDF" }],
+  ppt: [{ id: "pptx", label: "파워포인트 (PPTX)" }, { id: "pdf", label: "PDF" }, { id: "png", label: "PNG" }],
+};
 const LOADING_TITLE: Record<DocKind, string> = { hangul: "한글 문서를 여는 중", word: "문서를 여는 중", excel: "시트를 여는 중", ppt: "프레젠테이션을 여는 중", pdf: "딸깍 PDF를 여는 중", image: "이미지 편집기를 여는 중", video: "영상 편집기를 준비하는 중" };
 
 interface AiDraft { title: string; sections: { heading: string; body: string }[] }
@@ -286,6 +295,29 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
     }, 400);
     return () => window.clearTimeout(t);
   }, [docs, kind]);
+  // 지금 상태인 줄에 "남긴 버전" 표시(이름은 안 적어도 됨). 아직 기록이 없으면 지금 상태를 새로 남긴다. 상단 💾와 기록 패널 이름 바꾸기(기록이 아직 없을 때)가 쓴다
+  const markSaved = useCallback((name: string) => {
+    setDocs((l) => l.map((d) => {
+      if (d.id !== activeId) return d;
+      const h = d.hist ?? [];
+      const cur = h.find((v) => v.id === d.curId) ?? h[h.length - 1];
+      const marked = { saved: true, savedName: name || undefined };
+      return { ...d, hist: cur ? h.map((v) => (v === cur ? { ...v, ...marked } : v)) : [{ id: newId(), at: Date.now(), title: isEmpty(d) ? "새로 만듦" : d.cause ?? versionTitle(d), author: me.name, snap: { name: d.name, templateId: d.templateId, ai: d.ai }, ...marked }] };
+    }));
+  }, [activeId, me.name]);
+  // 상단 💾 · ⌘S(2026-11-27, 모든 편집기): 자동 저장은 늘 조용히 되고, 💾는 지금 상태를 버전 기록에 남긴다.
+  // 자동 저장은 마지막 상태 하나만 덮어쓰므로, 💾가 같은 일만 하면 버튼에 의미가 없었다
+  const saveNow = useCallback(() => {
+    setSaveState({ kind: "saving" });
+    window.setTimeout(() => {
+      try {
+        localStorage.setItem(storeKey(kind), JSON.stringify(kind === "pdf" ? [] : docs.filter((d) => !isEmpty(d) || d.threads?.length)));
+        markSaved("");
+        setSaveState({ kind: "saved", at: Date.now() });
+        showToast("저장했어요. 버전 기록에 남겼어요.");
+      } catch { setSaveState({ kind: "error" }); showToast("저장하지 못했어요. 이 브라우저 저장 공간이 부족해요.", "error"); }
+    }, 300);
+  }, [docs, kind, markSaved]);
 
   // 코멘트: 상단 바 오른쪽 💬 하나로(2026-11-19). 누르면 코멘트 목록이 열리면서 바로 남기기 모드 — Figma 코멘트 도구처럼.
   // 예전엔 왼쪽 "코멘트"(남기기)와 오른쪽 💬(목록)가 따로 있었다.
@@ -322,6 +354,8 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
   const [dock, setDock] = useState<"ai" | "comments" | "history" | null>("ai");
   const [versionSel, setVersionSel] = useState<string | null>(null);
   const commentMode = dock === "comments";
+  // 목록에서 보던 스레드는 목록을 닫으면 같이 닫는다(닫자마자 문서 위 팝오버로 튀어나오지 않게)
+  useEffect(() => { if (!commentMode) setOpenThreadId(null); }, [commentMode]);
   const dockRef = useRef(dock);
   dockRef.current = dock;
   const kindRef = useRef(kind);
@@ -462,20 +496,38 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
     return () => { window.clearInterval(t); document.removeEventListener("click", click, true); document.removeEventListener("keydown", key, true); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [starter, kind]);
-  const finishStarter = (done: boolean) => {
+  // shareTip: 3단계 [끝내기]도 마무리 말풍선을 띄운다(2026-11-27). 버튼 이름이 "끝내기"라 다 했다고 여기고 누르는 사람이 많다.
+  // 머리줄 건너뛰기 · Esc · 2단계에서 끝낸 경우만 안 띄운다
+  const finishStarter = (done: boolean, shareTipAnyway = false) => {
     track(done ? "starter_complete" : "starter_skip", { step: getStarterPhase() === "template" ? 2 : 3 });
     setStarterPhase(null); markHintSeen("templates"); markHintSeen("ai");
-    if (done) showToast("준비 끝! 함께 고치려면 오른쪽 위 공유를 눌러요.");
+    // 끝까지 한 사람에게만 공유 마무리 말풍선(2026-11-27). 공유는 받는 사람이 있어야 해 볼 수 있어 단계로 넣지 않고,
+    // 결과물이 막 생긴 순간에 자리만 알려 준다. AI가 쓴 걸 먼저 보도록 잠깐 뒤에 띄운다
+    if (done || shareTipAnyway) window.setTimeout(() => { if (getStarterPhase() === null) { setStarterPhase("share"); track("starter_share_tip_view"); } }, 900);
   };
+  const shareTip = kind === "hangul" && starter === "share";
+  const closeShareTip = useCallback((via: string) => { if (getStarterPhase() === "share") { setStarterPhase(null); track("starter_share_tip_close", { via }); } }, []);
+  // 상단 [공유]를 누르면 말풍선도 닫는다(공유 창은 그대로 열린다)
+  useEffect(() => {
+    if (!shareTip) return;
+    const click = (e: MouseEvent) => { if ((e.target as Element)?.closest?.('[data-onboarding="share"]')) closeShareTip("share"); };
+    document.addEventListener("click", click, true);
+    return () => document.removeEventListener("click", click, true);
+  }, [shareTip, closeShareTip]);
   // AI 결과가 문서에 들어가면 끝
   useEffect(() => { if ((getStarterPhase() === "ai" || getStarterPhase() === "ai-wait") && kind === "hangul" && active.ai) finishStarter(true); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [active.ai, kind]);
   // 편집기를 닫으면 튜토리얼도 끝
-  useEffect(() => () => { const p = getStarterPhase(); if (p === "template" || p === "ai" || p === "ai-wait") setStarterPhase(null); }, []);
+  useEffect(() => () => { const p = getStarterPhase(); if (p === "template" || p === "ai" || p === "ai-wait" || p === "share") setStarterPhase(null); }, []);
   // 건너뛴 사람용 파란 점(튜토리얼 중에는 숨김)
   const tplHint = useHintVisible("templates") && !tour && kind !== "pdf";
   const aiHint = useHintVisible("ai") && !tour;
   const coachBtn = { height: 36, padding: "0 14px", fontSize: 13 } as const;
-  const starterCoach = !tour || booting ? null : starter === "template" ? (!preview && (
+  const starterCoach = shareTip ? (
+    <Coachmark tip target='[data-onboarding="share"]' placement="bottom" step={STARTER_TOTAL} total={STARTER_TOTAL}
+      title="함께 고치려면 공유해요" body="링크를 보내면 받는 사람이 문서에 바로 코멘트를 남길 수 있어요. 파일을 주고받지 않아도 돼요."
+      onSkip={() => closeShareTip("esc")}
+      actions={<Button variant="secondary" size="md" onClick={() => closeShareTip("ok")} style={coachBtn}>확인</Button>} />
+  ) : !tour || booting ? null : starter === "template" ? (!preview && (
     <Coachmark target='[data-onboarding="tpl-panel"]' placement="right" step={2} total={STARTER_TOTAL}
       pulse='[data-onboarding="tpl-panel"] button[aria-label$="미리보기"] > span:first-child'
       title="필요한 양식은 여기서 바로 써요" body="공문, 신청서처럼 정해진 양식을 누르면 문서에 바로 들어가요. 하나 눌러 볼까요?"
@@ -486,13 +538,13 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
       pulse='[data-onboarding="ai-composer"] button[aria-label="보내기"]'
       title="말로만 해도 채워 줘요" body="딸깍 AI에게 하고 싶은 걸 적으면 문서를 대신 써 줘요. 보내기를 눌러 보세요."
       onSkip={() => finishStarter(false)}
-      actions={<Button variant="secondary" size="md" onClick={() => finishStarter(false)} style={coachBtn}>끝내기</Button>} />
+      actions={<Button variant="secondary" size="md" onClick={() => finishStarter(false, true)} style={coachBtn}>끝내기</Button>} />
   ) : null;
   const pdfOpen = kind === "pdf" && !!active.pdfName && !!pdfUrls.current[activeId];
   const dockTabs = [
-    { id: "ai", label: "딸깍 AI", hint: aiHint ? "어려우면 딸깍 AI에게 말로만 하세요" : `딸깍 AI 열기/닫기 (${AI_SHORTCUT})`, icon: Sparkles, dot: (aiDot && dock !== "ai") || aiHint, emphasized: true },
-    { id: "comments", label: "코멘트", hint: unread ? `코멘트 (${COMMENT_SHORTCUT}): 문서를 클릭해 남기기 · 목록 · 읽지 않음 ${unread}` : `코멘트 (${COMMENT_SHORTCUT}): 문서를 클릭해 남기기 · 목록`, icon: MessageCircle, badge: unread },
-    { id: "history", label: "버전 기록", hint: "버전 기록: 이전 상태를 보고 되돌려요", icon: History },
+    { id: "ai", label: "딸깍 AI", hint: aiHint ? "어려우면 딸깍 AI에게 말로만 하세요" : `딸깍 AI (${AI_SHORTCUT})`, icon: Sparkles, dot: (aiDot && dock !== "ai") || aiHint, emphasized: true },
+    { id: "comments", label: "코멘트", hint: `코멘트 (${COMMENT_SHORTCUT})`, icon: MessageCircle, badge: unread },
+    { id: "history", label: "버전 기록", hint: "버전 기록", icon: History },
   ];
   const dockOrder = ["ai", ...(hasHistory ? ["history"] : []), ...(hasComments ? ["comments"] : [])];
   const commentsPanel = (
@@ -503,7 +555,16 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
       openThreadId={openThreadId}
       hidden={pinsHidden}
       onToggleHidden={() => setPinsHidden((v) => !v)}
-      onOpen={(t) => { setPinsHidden(false); setOpenThreadId(t.id); setThreads((all) => all.map((x) => (x.id === t.id ? { ...x, readAt: Date.now(), forcedUnread: false } : x))); }}
+      // 목록에서 연 스레드는 목록 안에서 답글까지 본다(문서 위 팝오버 없음). 숨김 상태는 그대로 둔다
+      onOpen={(t) => { setOpenThreadId(t.id); setThreads((all) => all.map((x) => (x.id === t.id ? { ...x, readAt: Date.now(), forcedUnread: false } : x))); }}
+      renderThread={(t, nav) => (
+        <ThreadPopover
+          embedded nav={nav} thread={t} me={me} members={members} anchorLabel={t.place ?? conf.place} draft={t.myDraft ?? ""}
+          actions={docThreadActions(t, { threads, setThreads, me, setOpenThreadId })}
+        />
+      )}
+      surface={conf.surface}
+      hiddenNote={`${conf.surface}에서 코멘트를 숨겼어요. 목록에서는 계속 볼 수 있어요`}
       onMarkAllRead={() => setThreads((all) => all.map((t) => ({ ...t, readAt: Date.now(), forcedUnread: false })))}
       emptyHint={`열린 코멘트가 없어요. ${conf.surface}에서 남길 자리를 클릭해 보세요.`}
       onClose={() => setDock(null)}
@@ -528,16 +589,11 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
         setDock("ai");
         showToast("이 버전으로 되돌렸어요. 다른 버전도 그대로 남아 있어요.");
       }}
-      onSaveNow={(name) => {
-        // 지금 상태인 줄에 "남긴 버전" 표시와 이름을 붙인다. 아직 기록이 없으면 지금 상태를 새로 남긴다
-        setDocs((l) => l.map((d) => {
-          if (d.id !== activeId) return d;
-          const h = d.hist ?? [];
-          const cur = h.find((v) => v.id === d.curId) ?? h[h.length - 1];
-          const marked = { saved: true, savedName: name || undefined };
-          return { ...d, hist: cur ? h.map((v) => (v === cur ? { ...v, ...marked } : v)) : [{ id: newId(), at: Date.now(), title: isEmpty(d) ? "새로 만듦" : d.cause ?? versionTitle(d), author: me.name, snap: { name: d.name, templateId: d.templateId, ai: d.ai }, ...marked }] };
-        }));
-        showToast(name ? `"${name}" 버전으로 남겼어요.` : "지금 상태를 남겼어요.");
+      onRename={(id, name) => {
+        // 이름을 붙이면 그 줄은 남긴 버전. 기록이 아직 없어 보이는 줄(now-…)이면 지금 상태를 새로 남기며 이름을 붙인다
+        if (id.startsWith("now-")) { markSaved(name); }
+        else setDocs((l) => l.map((d) => (d.id !== activeId ? d : { ...d, hist: (d.hist ?? []).map((v) => (v.id === id ? { ...v, saved: true, savedName: name || undefined } : v)) })));
+        showToast(name ? "이름을 바꿨어요." : "이름을 지웠어요.");
       }}
       onClose={() => setDock(null)}
     />
@@ -584,9 +640,17 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
         // ▷ 발표는 뺐다(2026-11-20): 실제 PPT 에디터 안에 [발표] 버튼이 있어 겹친다. UI 디자인은 자체 에디터라 유지
         // 다운로드는 넣지 않는다(2026-11-20 사용자 "문서에 다운로드가 필요 없구나"): 안쪽 에디터 파일 메뉴에 저장 · 내려받기가 있다
         // 이미지: [다운로드](테두리) + [공유](채움)(2026-11-20 사용자 "안쪽 내보내기가 거슬린다, 상단에 다운받기?"). 안쪽 파란 [내보내기]는 뺐다
-        capabilities={kind === "video" ? { export: true } : kind === "image" ? { export: true, share: true } : { share: true }}
-        exportLabel={kind === "image" ? "다운로드" : undefined}
-        exportOptions={kind === "image" ? {
+        // 2026-11-27 다시: 저장 · 다운로드를 모든 편집기 상단에(요청 "다운로드랑 저장 버튼 추가", 미리캔버스 상단 [☁][다운로드][공유] 참고)
+        capabilities={kind === "video" ? { export: true } : { export: true, share: true }}
+        // 💾는 모든 편집기(2026-11-27 고객사 "저장은 그냥 위에 올려 달라"). 한 번 문서 계열에서 뺐다가 되돌림.
+        // 안쪽 에디터에도 저장이 있어 겹치지만, 상단 💾는 저장 + 버전 기록에 남기기라 할 일이 다르다. 안쪽 맨 위 줄 숨기기는 docs/editor-overlaps.md 12
+        onSave={saveNow}
+        onExport={kind === "pdf" ? () => showToast(`${active.name}.pdf 파일을 내려받을게요.`) : undefined}
+        exportOptions={DOC_FORMATS[kind] ? {
+          title: `${conf.label} 다운로드`,
+          groups: [{ id: "format", label: "파일 형식", type: "radio", default: DOC_FORMATS[kind]![0].id, options: DOC_FORMATS[kind]! }],
+          onExport: (c) => showToast(`${active.name}.${c.format} 파일을 내려받을게요.`),
+        } : kind === "image" ? {
           title: "이미지 다운로드",
           groups: [
             { id: "format", label: "파일 형식", type: "radio", default: "png", options: [{ id: "png", label: "PNG", hint: "선명하고 배경을 투명하게 둘 수 있어요" }, { id: "jpg", label: "JPG", hint: "파일이 작아요" }, { id: "pdf", label: "PDF", hint: "인쇄할 때 좋아요" }] },
@@ -596,7 +660,7 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
           ],
           onExport: (c) => showToast(`${c.pages === "current" ? "지금 페이지를 " : "모든 페이지를 "}${String(c.format).toUpperCase()} 파일 ${c.scale}배 크기로 내려받을게요.`),
         } : kind === "video" ? {
-          title: "영상 내보내기",
+          title: "영상 다운로드",
           groups: [
             { id: "format", label: "파일 형식", type: "radio", default: "mp4", options: [{ id: "mp4", label: "MP4 (H.264)", hint: "어디서나 잘 열려요" }, { id: "webm", label: "WebM (VP9)", hint: "파일이 더 작아요" }] },
             { id: "quality", label: "품질", type: "radio", default: "high", options: [{ id: "low", label: "낮음", hint: "파일이 가장 작아요" }, { id: "mid", label: "보통" }, { id: "high", label: "높음", hint: "추천해요. 선명하고 파일 크기도 알맞아요" }, { id: "max", label: "매우 높음", hint: "파일이 가장 커요" }] },
@@ -613,17 +677,19 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
           <IconTooltip label="다른 PDF 열기"><button
             type="button" onClick={() => pdfInput.current?.click()}
             className="h-10 px-3 flex items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff] hover:bg-black/[0.05]"
-            style={{ fontSize: editorType.body, fontWeight: 500, color: "#334155", background: "#fff", boxShadow: "inset 0 0 0 1px #e2e8f0" }}
+            // 테두리 상자는 공유 · 다운로드에만(2026-11-27). PDF [열기]도 템플릿 자리 버튼이라 같은 모양
+            style={{ fontSize: editorType.body, fontWeight: 500, color: "#334155", background: "transparent" }}
           >
             <FileUp size={20} /><HeaderLabel text="열기" />
           </button></IconTooltip>
         ) : (
           <IconTooltip label={tplHint ? "정해진 양식이 필요하면 여기서 골라요" : templatesOpen ? "템플릿 닫기" : "템플릿 열기"}><button
             type="button" aria-pressed={templatesOpen} onClick={() => { markHintSeen("templates"); setTemplatesOpen(!templatesOpen); }}
-            className="relative h-10 px-3 flex items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff] hover:bg-black/[0.05]"
-            style={{ fontSize: editorType.body, fontWeight: 500, color: templatesOpen ? color.brand : "#334155", background: templatesOpen ? color.surface.accent : "#fff", boxShadow: templatesOpen ? `inset 0 0 0 1px ${color.brand}` : "inset 0 0 0 1px #e2e8f0" }}
+            className={`relative h-10 px-3 flex items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff] ${templatesOpen ? "" : "hover:bg-black/[0.05]"}`}
+            // 패널 버튼 규칙(2026-11-27): 테두리 없는 아이콘 + 이름, 켜지면 옅은 회색 바탕. 버전 기록 · 코멘트와 같다. 파란색은 딸깍 AI와 다운로드에만
+            style={{ fontSize: editorType.body, fontWeight: templatesOpen ? 600 : 500, color: templatesOpen ? "#111827" : "#334155", background: templatesOpen ? "#f1f5f9" : "transparent" }}
           >
-            <LayoutGrid size={20} color={templatesOpen ? color.brand : "#475569"} /><HeaderLabel text="템플릿" />
+            <LayoutGrid size={20} color={templatesOpen ? "#111827" : "#475569"} /><HeaderLabel text="템플릿" />
             {tplHint && <span aria-hidden className="hint-dot absolute -top-0.5 -right-0.5 size-2.5 rounded-full" style={{ background: color.brand, boxShadow: "0 0 0 2px #fff" }} />}
           </button></IconTooltip>
         )}
@@ -677,7 +743,7 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
                   key={activeId}
                   threads={threads} setThreads={setThreads} me={me} members={members} anchorLabel={conf.place}
                   commentMode={commentMode} exitCommentMode={() => setDock(null)}
-                  openThreadId={openThreadId} setOpenThreadId={setOpenThreadId} pinsHidden={pinsHidden}
+                  openThreadId={openThreadId} setOpenThreadId={setOpenThreadId} pinsHidden={pinsHidden} threadInPanel={commentMode}
                 />
               </div>
             </ImageEditorFrame>
@@ -699,7 +765,7 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
                   key={activeId}
                   threads={threads} setThreads={setThreads} me={me} members={members} anchorLabel={conf.place}
                   commentMode={commentMode} exitCommentMode={() => setDock(null)}
-                  openThreadId={openThreadId} setOpenThreadId={setOpenThreadId} pinsHidden={pinsHidden}
+                  openThreadId={openThreadId} setOpenThreadId={setOpenThreadId} pinsHidden={pinsHidden} threadInPanel={commentMode}
                 />
               </SlideMock>
             ) : null}
@@ -711,7 +777,7 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
                   key={activeId}
                   threads={threads} setThreads={setThreads} me={me} members={members} anchorLabel={conf.place}
                   commentMode={commentMode} exitCommentMode={() => setDock(null)}
-                  openThreadId={openThreadId} setOpenThreadId={setOpenThreadId} pinsHidden={pinsHidden}
+                  openThreadId={openThreadId} setOpenThreadId={setOpenThreadId} pinsHidden={pinsHidden} threadInPanel={commentMode}
                 />
               </div>
             ) : null)}
@@ -722,7 +788,7 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
                   key={activeId} snap={snapToSheetCell}
                   threads={threads} setThreads={setThreads} me={me} members={members} anchorLabel={conf.place}
                   commentMode={commentMode} exitCommentMode={() => setDock(null)}
-                  openThreadId={openThreadId} setOpenThreadId={setOpenThreadId} pinsHidden={pinsHidden}
+                  openThreadId={openThreadId} setOpenThreadId={setOpenThreadId} pinsHidden={pinsHidden} threadInPanel={commentMode}
                 />
               </div>
             ) : (
@@ -746,7 +812,7 @@ export function DocEditor({ kind, onBack, onBellClick, onSwitchApp, profileMenu,
                 key={activeId}
                 threads={threads} setThreads={setThreads} me={me} members={members} anchorLabel={conf.place}
                 commentMode={commentMode} exitCommentMode={() => setDock(null)}
-                openThreadId={openThreadId} setOpenThreadId={setOpenThreadId} pinsHidden={pinsHidden}
+                openThreadId={openThreadId} setOpenThreadId={setOpenThreadId} pinsHidden={pinsHidden} threadInPanel={commentMode}
               />
             </div>
             )}

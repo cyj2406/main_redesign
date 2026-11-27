@@ -1,11 +1,11 @@
 import type { ComponentType, ReactNode } from "react";
-import { ChevronsRight } from "lucide-react";
+import { ChevronsLeft, ChevronsRight } from "lucide-react";
 
 import { color, f, editorType } from "@/app/styleTokens";
 import { IconTooltip } from "@/app/components/viewer/IconTooltip";
 
 import { PanelResizeHandle, usePanelWidth } from "./PanelResize";
-import { useHeaderLevel } from "./EditorHeader";
+import { useHeaderLevel, useHeaderWide } from "./EditorHeader";
 
 /**
  * 오른쪽 도크(에디터 공통, 2026-11-13 v2) — 맨 오른쪽 세로 탭 줄(항상 보임) + 그 왼쪽 패널(기본 360px, 2026-11-19 300에서 넓힘: AI 대화 16px. 왼쪽 끝을 끌어 300~600px).
@@ -74,64 +74,79 @@ export function SideDock({ tabs, active, onChange, width: defWidth = 360, rail =
 }
 
 /** 패널 머리 왼쪽 끝 접기 버튼(»). 모든 도크 패널이 같은 자리에 둔다 — Claude in Chrome·Figma 오른쪽 패널과 같은 위치 */
-export function PanelCloseButton({ onClick, shortcut }: { onClick: () => void; shortcut?: string }) {
+/**
+ * 패널 닫기. 규칙(2026-11-27): 패널 머리의 캔버스 쪽 끝에, 패널이 접히는 방향을 가리키는 » 또는 «.
+ * 오른쪽 패널(AI · 코멘트 · 기록)은 왼쪽 끝 », 왼쪽 패널(템플릿)은 오른쪽 끝 «. 예전엔 왼쪽 패널만 ✕라 같은 동작이 달라 보였다.
+ */
+export function PanelCloseButton({ onClick, shortcut, side = "right", label = "패널 닫기" }: { onClick: () => void; shortcut?: string; side?: "left" | "right"; label?: string }) {
+  const Icon = side === "left" ? ChevronsLeft : ChevronsRight;
   return (
-    <IconTooltip label={shortcut ? `패널 닫기 (${shortcut})` : "패널 닫기"}><button
+    <IconTooltip label={shortcut ? `${label} (${shortcut})` : label}><button
       type="button"
-      aria-label="패널 닫기"
+      aria-label={label}
      
       onClick={onClick}
       className="size-8 shrink-0 flex items-center justify-center rounded-md hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
     >
-      <ChevronsRight size={15} color="#475569" />
+      <Icon size={15} color="#475569" />
     </button></IconTooltip>
   );
 }
 
 /**
- * 상단 바용 도크 토글(아이콘만) — ✨ AI · 💬 코멘트(읽지 않음 배지) · 🕘 기록. 누르면 그 패널을 열고, 열린 걸 다시 누르면 닫는다.
- * Google Docs의 "코멘트 기록" 아이콘, Claude in Chrome 툴바 버튼과 같은 역할.
+ * 상단 바용 패널 버튼 — [✨ 딸깍 AI] [🕘 버전 기록] [💬 코멘트]. 누르면 그 패널을 열고, 열린 걸 다시 누르면 닫는다.
+ * - 딸깍 AI(emphasized)만 옅은 파랑 바탕 + 이름(아주 좁을 때만 아이콘). 열리면 파란 테두리를 더한다.
+ * - 나머지(버전 기록 · 코멘트)는 테두리 없는 "아이콘 + 이름", 열리면 옅은 회색 바탕(2026-11-27). 템플릿 버튼과 같은 규칙.
+ *   예전 회색 묶음은 아무 패널도 안 열렸을 때 고른 게 없는 탭처럼(비활성처럼) 보였고, 덩어리가 커서 딸깍 AI와 무게가 비슷했다.
+ *   이름은 상단 바가 넉넉할 때만(HeaderWideContext). 툴팁 · aria-label에는 항상 남는다.
  */
 export function DockButtons({ tabs, active, onChange }: { tabs: Omit<DockTab, "panel">[]; active: string | null; onChange: (id: string | null) => void }) {
-  // 상단 바가 좁으면 이름을 숨기고 아이콘만(1: 보조 버튼, 2: 딸깍 AI까지). 이름은 툴팁·aria-label에 남는다
   const level = useHeaderLevel();
+  const wide = useHeaderWide();
+  const main = tabs.filter((t) => t.emphasized);
+  const rest = tabs.filter((t) => !t.emphasized);
+  const tip = (t: Omit<DockTab, "panel">, on: boolean) => t.hint ?? (on ? `${t.label} 닫기` : `${t.label} 열기`);
   return (
     <div className="flex items-center gap-2" role="toolbar" aria-label="패널 열기">
-      {tabs.map((t) => {
+      {main.map((t) => {
         const on = active === t.id;
         const Icon = t.icon;
-        if (t.emphasized) {
-          // 핵심 기능은 아이콘만 두지 않고 이름까지(Canva "Canva AI"·Notion "Notion AI" 버튼처럼). 닫혀 있어도 브랜드 색으로 보인다
-          return (
-            <IconTooltip key={t.id} label={t.hint ?? (on ? `${t.label} 닫기` : `${t.label} 열기`)}><button
-              type="button" aria-pressed={on} disabled={t.disabled} aria-label={t.label}
-              onClick={() => onChange(on ? null : t.id)}
-              className={`relative h-10 ${level < 2 ? "pl-3 pr-4" : "px-2.5"} mr-1 flex items-center gap-2 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#4f7bff] disabled:opacity-35 hover:brightness-[0.97]`}
-              style={{ ...f, background: color.surface.accent, color: color.brand, fontSize: editorType.body, fontWeight: 600, boxShadow: on ? `inset 0 0 0 1.5px ${color.brand}` : undefined }}
-            >
-              <Icon size={20} color={color.brand} />
-              {level < 2 && t.label}
-              {t.dot && !on && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full" style={{ background: color.brand, boxShadow: "0 0 0 2px #fff" }} />}
-            </button></IconTooltip>
-          );
-        }
         return (
-          <IconTooltip key={t.id} label={t.hint ?? (on ? `${t.label} 닫기` : `${t.label} 열기`)}><button
-            type="button" aria-pressed={on} disabled={t.disabled}
-            aria-label={t.badge ? `${t.label} (읽지 않음 ${t.badge})` : t.label}
-           
+          <IconTooltip key={t.id} label={tip(t, on)}><button
+            type="button" aria-pressed={on} disabled={t.disabled} aria-label={t.label}
             onClick={() => onChange(on ? null : t.id)}
-            className={`relative size-10 flex items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff] disabled:opacity-35 ${on ? "" : "hover:bg-[#f8fafc]"}`}
-            style={{ ...f, background: on ? color.surface.accent : "#fff", boxShadow: on ? `inset 0 0 0 1px ${color.brand}` : "inset 0 0 0 1px #e2e8f0", color: on ? color.brand : "#334155", fontSize: editorType.body, fontWeight: 500 }}
+            className={`relative h-10 ${level < 2 ? "pl-3 pr-4" : "px-2.5"} flex items-center gap-2 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#4f7bff] disabled:opacity-35 hover:brightness-[0.97]`}
+            style={{ ...f, background: color.surface.accent, color: color.brand, fontSize: editorType.body, fontWeight: 600, boxShadow: on ? `inset 0 0 0 1.5px ${color.brand}` : undefined }}
           >
-            {/* 2026-11-19 사용자 "버전 기록·코멘트는 판단해서": 보조 버튼은 아이콘 + 테두리만(Google Docs·Figma·Canva처럼 🕘·💬는 아이콘으로 통함). 이름은 툴팁·aria-label.
-                이름까지 보이는 건 핵심 기능인 ✨ 딸깍 AI(emphasized)와 주요 버튼 공유·내보내기 */}
-            <Icon size={20} color={on ? color.brand : "#475569"} />
-            {!!t.badge && <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full flex items-center justify-center" style={{ ...f, background: color.brand, color: "#fff", fontSize: 9.5, fontWeight: 700, boxShadow: "0 0 0 2px #fff" }}>{t.badge > 99 ? "99+" : t.badge}</span>}
-            {!t.badge && t.dot && <span className="absolute top-1 right-1 size-2 rounded-full" style={{ background: color.brand, boxShadow: "0 0 0 2px #fff" }} />}
+            <Icon size={20} color={color.brand} />
+            {level < 2 && <span className="whitespace-nowrap">{t.label}</span>}
+            {t.dot && !on && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full" style={{ background: color.brand, boxShadow: "0 0 0 2px #fff" }} />}
           </button></IconTooltip>
         );
       })}
+      {rest.length > 0 && (
+        <div className="flex items-center gap-1">
+          {rest.map((t) => {
+            const on = active === t.id;
+            const Icon = t.icon;
+            const fg = on ? "#111827" : "#475569";
+            return (
+              <IconTooltip key={t.id} label={tip(t, on)}><button
+                type="button" aria-pressed={on} disabled={t.disabled}
+                aria-label={t.badge ? `${t.label} (읽지 않음 ${t.badge})` : t.label}
+                onClick={() => onChange(on ? null : t.id)}
+                className={`relative h-10 ${wide ? "pl-2.5 pr-3" : "w-10 justify-center"} flex items-center gap-1.5 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#4f7bff] disabled:opacity-35 ${on ? "" : "hover:bg-black/[0.05]"}`}
+                style={{ ...f, background: on ? "#f1f5f9" : "transparent", color: fg, fontSize: editorType.body, fontWeight: on ? 600 : 500 }}
+              >
+                <Icon size={19} color={fg} />
+                {wide && <span className="whitespace-nowrap">{t.label}</span>}
+                {!!t.badge && <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full flex items-center justify-center" style={{ ...f, background: color.brand, color: "#fff", fontSize: 9.5, fontWeight: 700, boxShadow: "0 0 0 2px #fff" }}>{t.badge > 99 ? "99+" : t.badge}</span>}
+                {!t.badge && t.dot && !on && <span className="absolute top-1 right-1 size-2 rounded-full" style={{ background: color.brand, boxShadow: "0 0 0 2px #fff" }} />}
+              </button></IconTooltip>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

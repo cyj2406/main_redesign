@@ -1,5 +1,5 @@
 import { useContext, createContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronLeft, Cloud, Download, Loader2, Play, Plus, Bell } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, Cloud, CloudAlert, Download, Save, Loader2, Play, Plus, Bell } from "lucide-react";
 
 import { ProfileMenuButton } from "@/app/components/account/ProfileMenuButton";
 import { color, f, editorType } from "@/app/styleTokens";
@@ -18,9 +18,9 @@ export interface Viewer extends CommentAuthor { isMe?: boolean; activity: string
 export interface HeaderCapabilities {
   /** ▷ 미리보기/프레젠테이션/재생 — 문구는 presentLabel */
   present?: boolean;
-  /** 내보내기 버튼. 공유가 없으면 이게 주요(채운) 버튼이 된다 */
+  /** 다운로드 버튼. 있으면 항상 주요(채운) 버튼, 오른쪽 끝(2026-11-27 "다운로드가 더 강조되어야", 미리캔버스 방식) */
   export?: boolean;
-  /** 공유(공동 작업). 있으면 항상 주요 버튼 */
+  /** 공유(공동 작업). 다운로드가 있으면 테두리 버튼, 없을 때만 채운 버튼 */
   share?: boolean;
 }
 
@@ -38,7 +38,7 @@ export type SaveState = { kind: "saved"; at: number } | { kind: "saving" } | { k
  *   ② 도구 슬롯: 그 도구에만 있는 핵심 행동 1~2개(toolSlot)
  *   ③ 패널 토글: ✨ AI · 💬 코멘트 · 🕘 기록 아이콘(actions — DockButtons). 오른쪽 패널을 여는 버튼은 오른쪽에
  *   ④ 🔔 알림
- *   ⑤ 결과물  : ▷ · [내보내기] · [공유 •N] — 오른쪽 끝 채운 버튼은 "다음 단계" 하나(공유가 없으면 내보내기)
+ *   ⑤ 결과물  : ▷ · [공유] · [다운로드]. 오른쪽 끝 채운 버튼은 하나. 💾는 ① 파일 이름 옆
  * 내 프로필은 오른쪽 끝에 하나만. 메뉴는 서비스 상단바와 같은 컴포넌트(account/ProfileMenuButton). 함께 보는 사람은 공유 팝오버에서(버튼에 인원 표시 없음).
  */
 /**
@@ -47,6 +47,9 @@ export type SaveState = { kind: "saved"; at: number } | { kind: "saving" } | { k
  */
 export const HeaderLevelContext = createContext<0 | 1 | 2>(0);
 export const useHeaderLevel = () => useContext(HeaderLevelContext);
+/** 상단 바가 넉넉하면(1240px 이상) 패널 버튼(기록 · 코멘트)도 이름을 보인다(2026-11-27, 아이콘만으론 처음 쓰는 사람이 모른다) */
+export const HeaderWideContext = createContext(false);
+export const useHeaderWide = () => useContext(HeaderWideContext);
 /** 도구 슬롯 버튼 글자: 상단 바가 좁으면(minLevel 이상) 숨기고 화면 읽기용으로만 남긴다 */
 export function HeaderLabel({ text, hideFrom = 1 }: { text: string; hideFrom?: 1 | 2 }) {
   const level = useHeaderLevel();
@@ -57,7 +60,7 @@ export type ProfileMenuHandlers = Parameters<typeof ProfileMenuButton>[0];
 
 export function EditorHeader({
   appIcon, appName, currentAppId, onSwitchApp, fileName, onRenameFile, location, saveState,
-  capabilities = { share: true, present: true }, presentLabel = "프레젠테이션", onPresent, presentOptions, onExport, exportOptions, exportLabel = "내보내기",
+  capabilities = { share: true, present: true }, presentLabel = "프레젠테이션", onPresent, presentOptions, onExport, exportOptions, exportLabel = "다운로드", onSave, primary = "export",
   toolSlot, actions, viewers, onBack, onBell, accent = color.brand, profileMenu,
 }: {
   appIcon: string;
@@ -76,8 +79,12 @@ export function EditorHeader({
   /** ▷▾ 보기 옵션. 없으면 onPresent 하나(presentLabel) */
   presentOptions?: PresentOption[];
   onExport?: () => void;
-  /** [내보내기] 버튼 글자. 이미지는 "다운로드"(결과물이 곧 파일이라 더 바로 와닿는다) */
+  /** [다운로드] 버튼 글자(2026-11-27 기본값 "내보내기" → "다운로드": Canva · 미리캔버스 모두 "다운로드") */
   exportLabel?: string;
+  /** 있으면 ☁ 저장 아이콘 버튼 + ⌘S(2026-11-27, 미리캔버스 상단 저장 아이콘 참고). 자동 저장은 그대로, 누르면 지금 바로 저장 */
+  onSave?: () => void;
+  /** 오른쪽 끝 채운 버튼(2026-11-27). 문서 계열은 다운로드(파일로 받아 제출하는 게 다음 단계), UI 디자인 · 보드는 공유(협업 도구) */
+  primary?: "export" | "share";
   /** 있으면 [내보내기]가 설정 팝오버(형식·품질 등)를 연다(2026-11-19, 영상) */
   exportOptions?: { title?: string; groups: ExportGroup[]; onExport: (choice: ExportChoice) => void };
   toolSlot?: ReactNode;
@@ -97,13 +104,17 @@ export function EditorHeader({
   const [, tick] = useState(0);
   // "n분 전" 갱신
   useEffect(() => { const t = window.setInterval(() => tick((n) => n + 1), 30000); return () => window.clearInterval(t); }, []);
-  const exportPrimary = !!capabilities.export && !capabilities.share;
+  const hasExport = !!capabilities.export && !!(onExport || exportOptions);
+  const hasShare = !!capabilities.share;
+  // 채운 버튼은 하나: 고른 쪽이 없으면 남은 쪽이 맡는다
+  const exportPrimary = hasExport && (primary === "export" || !hasShare);
   const headerRef = useRef<HTMLElement>(null);
   const [level, setLevel] = useState<0 | 1 | 2>(0);
+  const [roomy, setRoomy] = useState(false);
   useEffect(() => {
     const el = headerRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => { const w = el.clientWidth; setLevel(w >= 1000 ? 0 : w >= 820 ? 1 : 2); });
+    const ro = new ResizeObserver(() => { const w = el.clientWidth; setLevel(w >= 1000 ? 0 : w >= 820 ? 1 : 2); setRoomy(w >= 1240); });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -121,7 +132,7 @@ export function EditorHeader({
   }, []);
 
   return (
-    <HeaderLevelContext.Provider value={level}>
+    <HeaderLevelContext.Provider value={level}><HeaderWideContext.Provider value={roomy}>
     <header ref={headerRef} className="h-14 shrink-0 flex items-center gap-1 pl-2 pr-3 whitespace-nowrap [&_button]:shrink-0" style={{ ...f, background: "#fff", borderBottom: "1px solid #eef0f3" }}>
       {/* ① 정체성 */}
       {!(planB && wide) && <IconTooltip label="딸깍 홈으로 나가기"><button type="button" aria-label="딸깍 홈으로 나가기" onClick={onBack} className="size-10 flex items-center justify-center rounded-full hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]">
@@ -153,12 +164,24 @@ export function EditorHeader({
         <span className="flex items-center gap-2 min-w-0">
           {onSwitchApp && <span aria-hidden style={{ color: "#cbd5e1" }}>/</span>}
           <EditableTitle value={fileName} onChange={onRenameFile} />
-          {(saveState || location) && <SaveBadge state={saveState} location={location} />}
+          {/* 💾는 파일 이름 바로 옆(2026-11-27): 저장은 파일에 관한 기능이라 오른쪽(AI · 패널 · 결과물)에서 옮겼다(Canva · 미리캔버스도 파일 이름 근처).
+              저장 중은 💾 아이콘(돌아가는 원)이 보여 글자를 겹치지 않는다. 저장 못 함은 놓치면 안 되니 글자도 같이 */}
+          {onSave ? (
+            <>
+              <SaveButton state={saveState} onSave={onSave} />
+              {saveState?.kind === "error" && <SaveBadge state={saveState} />}
+            </>
+          ) : (saveState || location) && <SaveBadge state={saveState} location={location} />}
         </span>
       )}
 
       {/* ② 도구 슬롯 */}
-      {fileName && toolSlot && <div className={`${level ? "ml-2" : "ml-4"} flex items-center gap-2`}>{toolSlot}</div>}
+      {/* 파일(이름 · 💾)과 도구(템플릿 등 패널 버튼) 사이 구분선(2026-11-27): 오른쪽 [패널 토글] | [결과물]과 같은 모양.
+          테두리 없는 템플릿이 파일 이름에 붙은 글자처럼 읽혀서 묶음을 선으로 나눴다 */}
+      {fileName && toolSlot && <>
+        <span aria-hidden className={`w-px h-5 ${level ? "ml-1" : "ml-2"} mr-1 shrink-0`} style={{ background: "#e2e8f0" }} />
+        <div className="flex items-center gap-2">{toolSlot}</div>
+      </>}
 
       <div className="ml-auto flex items-center gap-2">
         {/* ③ 패널 토글 */}
@@ -168,7 +191,24 @@ export function EditorHeader({
         {fileName && capabilities.present && (presentOptions?.length || onPresent) && (
           <PresentButton options={presentOptions?.length ? presentOptions : [{ id: "present", label: presentLabel, run: onPresent! }]} />
         )}
-        {fileName && capabilities.export && (onExport || exportOptions) && (
+        {/* 채운 버튼이 오른쪽 끝: 다운로드가 주요면 [공유][다운로드], 공유가 주요면 [다운로드][공유] */}
+        {exportPrimary ? <>
+        {fileName && hasShare && (
+          <div className="relative">
+            <button
+              type="button"
+              aria-expanded={shareOpen}
+              data-onboarding="share"
+              onClick={() => setShareOpen((v) => !v)}
+              className="h-10 px-4 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#4f7bff]"
+              style={exportPrimary ? { background: "#fff", color: "#111827", fontSize: editorType.body, fontWeight: 600, boxShadow: "inset 0 0 0 1px #e2e8f0" } : { background: accent, color: "#fff", fontSize: editorType.body, fontWeight: 600 }}
+            >
+              공유
+            </button>
+            {shareOpen && <SharePopover fileName={fileName} accent={accent} onClose={() => setShareOpen(false)} />}
+          </div>
+        )}
+        {fileName && hasExport && (
           <div className="relative">
           <button
             type="button" aria-expanded={exportOptions ? exportOpen : undefined} aria-haspopup={exportOptions ? "dialog" : undefined}
@@ -178,23 +218,39 @@ export function EditorHeader({
           >
             <Download size={18} />{level < 1 ? exportLabel : <span className="sr-only">{exportLabel}</span>}
           </button>
-          {exportOptions && exportOpen && <ExportPopover title={exportOptions.title} actionLabel={exportLabel} groups={exportOptions.groups} accent={accent} onClose={() => setExportOpen(false)} onExport={(c) => { setExportOpen(false); exportOptions.onExport(c); }} />}
+          {exportOptions && exportOpen && <ExportPopover title={exportOptions.title} actionLabel={exportLabel} groups={exportOptions.groups} accent={accent} onClose={() => setExportOpen(false)} onExport={(c) => { setExportOpen(false); exportOptions.onExport(c); }} onShare={hasShare ? () => { setExportOpen(false); setShareOpen(true); } : undefined} />}
           </div>
         )}
-        {fileName && capabilities.share && (
+        </> : <>
+        {fileName && hasExport && (
+          <div className="relative">
+          <button
+            type="button" aria-expanded={exportOptions ? exportOpen : undefined} aria-haspopup={exportOptions ? "dialog" : undefined}
+            onClick={() => (exportOptions ? setExportOpen((v) => !v) : onExport?.())}
+            className={`h-10 ${level ? "px-3" : "px-4"} rounded-lg flex items-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#4f7bff]`}
+            style={exportPrimary ? { background: accent, color: "#fff", fontSize: editorType.body, fontWeight: 600 } : { background: "#fff", color: "#111827", fontSize: editorType.body, fontWeight: 600, boxShadow: "inset 0 0 0 1px #e2e8f0" }}
+          >
+            <Download size={18} />{level < 1 ? exportLabel : <span className="sr-only">{exportLabel}</span>}
+          </button>
+          {exportOptions && exportOpen && <ExportPopover title={exportOptions.title} actionLabel={exportLabel} groups={exportOptions.groups} accent={accent} onClose={() => setExportOpen(false)} onExport={(c) => { setExportOpen(false); exportOptions.onExport(c); }} onShare={hasShare ? () => { setExportOpen(false); setShareOpen(true); } : undefined} />}
+          </div>
+        )}
+        {fileName && hasShare && (
           <div className="relative">
             <button
               type="button"
               aria-expanded={shareOpen}
+              data-onboarding="share"
               onClick={() => setShareOpen((v) => !v)}
               className="h-10 px-4 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#4f7bff]"
-              style={{ background: accent, color: "#fff", fontSize: editorType.body, fontWeight: 600 }}
+              style={exportPrimary ? { background: "#fff", color: "#111827", fontSize: editorType.body, fontWeight: 600, boxShadow: "inset 0 0 0 1px #e2e8f0" } : { background: accent, color: "#fff", fontSize: editorType.body, fontWeight: 600 }}
             >
               공유
             </button>
             {shareOpen && <SharePopover fileName={fileName} accent={accent} onClose={() => setShareOpen(false)} />}
           </div>
         )}
+        </>}
         {/* ④ 알림: 내 계정 소식이라 파일 작업 버튼 사이가 아니라 프로필 바로 옆(2026-11-19, Google Docs·Notion·Canva·Figma와 같은 자리) */}
         {onBell && (
           <div className="ml-1"><IconTooltip label="알림"><button type="button" aria-label="알림" onClick={onBell} className="relative size-10 flex items-center justify-center rounded-full hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]">
@@ -206,7 +262,7 @@ export function EditorHeader({
         {profileMenu && <div className="ml-1"><ProfileMenuButton {...profileMenu} /></div>}
       </div>
     </header>
-    </HeaderLevelContext.Provider>
+    </HeaderWideContext.Provider></HeaderLevelContext.Provider>
   );
 }
 
@@ -262,6 +318,35 @@ function PresentButton({ options }: { options: PresentOption[] }) {
  * 저장 상태(자동 저장). 2026-11-19 간소화: 평소(저장됨)엔 구름 아이콘만 두고 위치·시각은 툴팁으로.
  * 글자는 저장 중·저장 못 함처럼 알아야 할 때만 보인다(Google Docs·Canva 방식). 예전엔 "임시 보관함 · 저장됨 · 39초 전"이 늘 붙어 있었다.
  */
+/**
+ * 저장(2026-11-27). 미리캔버스처럼 다운로드 왼쪽 아이콘 하나. 평소엔 💾 디스크(사용자 "구름은 저장처럼 안 보인다"), 저장 중 돌아가는 원, 실패 ☁!.
+ * 자동 저장은 계속 되고, 누르거나 ⌘S로 지금 바로 저장. 툴팁은 짧게 "저장 (⌘S)" · "저장됨 · 방금".
+ */
+const SAVE_KEY = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘S" : "Ctrl+S";
+function SaveButton({ state, onSave }: { state?: SaveState; onSave: () => void }) {
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "s") { e.preventDefault(); onSave(); } };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [onSave]);
+  const saving = state?.kind === "saving";
+  const error = state?.kind === "error";
+  const label = saving ? "저장 중" : error ? `저장 못 함: 다시 저장 (${SAVE_KEY})` : state?.kind === "saved" ? `저장됨 · ${relTimeShort(state.at)} (${SAVE_KEY})` : `저장 (${SAVE_KEY})`;
+  return (
+    <IconTooltip label={label}>
+      <button type="button" aria-label={saving ? "저장 중" : error ? "저장 못 함, 다시 저장" : "저장"} onClick={onSave} disabled={saving}
+        // 테두리 없는 아이콘(2026-11-27): 자동 저장이라 자주 누를 버튼이 아니다. 상자는 공유 · 다운로드에만
+        className="size-10 flex items-center justify-center rounded-lg outline-none hover:bg-black/[0.05] focus-visible:ring-2 focus-visible:ring-[#4f7bff]">
+        {saving ? <Loader2 size={19} color="#64748b" className="animate-spin" /> : error ? <CloudAlert size={20} color="#b45309" /> : <Save size={19} color="#475569" />}
+      </button>
+    </IconTooltip>
+  );
+}
+function relTimeShort(at: number) {
+  const m = Math.floor((Date.now() - at) / 60000);
+  return m < 1 ? "방금" : m < 60 ? `${m}분 전` : `${Math.floor(m / 60)}시간 전`;
+}
+
 function SaveBadge({ state, location, showSaved }: { state?: SaveState; location?: string; showSaved?: boolean }) {
   if (state?.kind === "saving") {
     return <span className="shrink-0 inline-flex items-center gap-1 ml-1" style={{ fontSize: editorType.caption, color: "#94a3b8" }} aria-live="polite"><Loader2 size={12} className="animate-spin" />저장 중…</span>;

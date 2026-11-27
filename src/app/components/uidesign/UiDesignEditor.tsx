@@ -13,6 +13,7 @@ import { f, editorType } from "@/app/styleTokens";
 import artUiDesign from "@/assets/home/editor/ui-design.png";
 
 import { DesignFile, type FileApi } from "./DesignFile";
+import { ThreadPopover } from "./Comments";
 import { CLARIFY_REPLY, EDITOR_ACCENT, TEMPLATES, addNode, classifyPrompt, docFromSteps, emptyDoc, generateSteps, makeNode, uid, type Doc, type Thread } from "./model";
 import { DocThumb, UiDesignHome } from "./UiDesignHome";
 import { IconTooltip } from "@/app/components/viewer/IconTooltip";
@@ -225,6 +226,10 @@ export function UiDesignEditor({ onBack, onBellClick, onSwitchApp, profileMenu, 
   const threadsSetter = (id: string) => (setterCache.current[id] ??= setThreadsFor(id));
   const registerCache = useRef<Record<string, (a: FileApi) => void>>({});
   const register = (id: string) => (registerCache.current[id] ??= (a: FileApi) => { apis.current[id] = a; });
+  // 파일마다 열린 스레드(코멘트 목록이 열려 있으면 목록 안에 그린다, 2026-11-27)
+  const [openThreadByFile, setOpenThreadByFile] = useState<Record<string, string | null>>({});
+  const openThreadCache = useRef<Record<string, (tid: string | null) => void>>({});
+  const reportOpenThread = (id: string) => (openThreadCache.current[id] ??= (tid) => setOpenThreadByFile((m) => (m[id] === tid ? m : { ...m, [id]: tid })));
   const onSelection = useCallback((label: string | null) => setSelection(label), []);
 
   /** 홈에서 시키면 새 파일을 만들고, 그 파일이 준비될 때까지 기다렸다가 넘긴다 */
@@ -238,9 +243,9 @@ export function UiDesignEditor({ onBack, onBellClick, onSwitchApp, profileMenu, 
 
   // 오른쪽 패널 토글 — 홈 탭에선 파일 단위 기능(코멘트)을 숨기고 AI만. 버전 기록은 구현 전이라 버튼을 두지 않는다(빈 패널을 여는 버튼 = 동작 없는 버튼).
   const dockTabs = [
-    { id: "ai", label: "딸깍 AI", hint: `딸깍 AI 열기/닫기 (${AI_SHORTCUT})`, icon: Sparkles, dot: aiDot && dock !== "ai", emphasized: true },
-    ...(activeFile ? [{ id: "history", label: "버전 기록", hint: "버전 기록: 이전 상태를 보고 되돌려요", icon: History }] : []),
-    ...(activeFile ? [{ id: "comments", label: "코멘트 목록", hint: unread ? `코멘트 (${COMMENT_SHORTCUT}) · 읽지 않음 ${unread}` : `코멘트 (${COMMENT_SHORTCUT}): 캔버스를 클릭해 남기기 · 목록`, icon: MessageCircle, badge: unread }] : []),
+    { id: "ai", label: "딸깍 AI", hint: `딸깍 AI (${AI_SHORTCUT})`, icon: Sparkles, dot: aiDot && dock !== "ai", emphasized: true },
+    ...(activeFile ? [{ id: "history", label: "버전 기록", hint: "버전 기록", icon: History }] : []),
+    ...(activeFile ? [{ id: "comments", label: "코멘트 목록", hint: `코멘트 (${COMMENT_SHORTCUT})`, icon: MessageCircle, badge: unread }] : []),
   ];
 
   const aiPanel = (
@@ -282,10 +287,16 @@ export function UiDesignEditor({ onBack, onBellClick, onSwitchApp, profileMenu, 
         const pg = d.pages.find((x) => x.id === t.pageId)?.name ?? "";
         return `${pg} · ${(t.frameId && d.nodes[t.frameId]?.name) || "캔버스"}`;
       }}
-      openThreadId={null}
+      openThreadId={openThreadByFile[activeFile.id] ?? null}
       hidden={pinsHidden}
       onToggleHidden={() => setPinsHidden((v) => !v)}
       onOpen={(t) => apis.current[activeFile.id]?.jumpTo(t)}
+      renderThread={(t, nav) => {
+        const v = apis.current[activeFile.id]?.threadView(t);
+        return v ? <ThreadPopover embedded nav={nav} thread={t} me={me} members={v.members} anchorLabel={v.anchorLabel} draft={t.myDraft ?? ""} actions={v.actions} /> : null;
+      }}
+      surface="캔버스"
+      hiddenNote="캔버스에서 코멘트를 숨겼어요. 목록에서는 계속 볼 수 있어요"
       onMarkAllRead={() => threadsSetter(activeFile.id)((all) => all.map((t) => ({ ...t, readAt: Date.now() })))}
       emptyHint="열린 코멘트가 없어요. 캔버스를 클릭해 남겨 보세요."
       onClose={() => setDock(null)}
@@ -301,6 +312,7 @@ export function UiDesignEditor({ onBack, onBellClick, onSwitchApp, profileMenu, 
   return (
     <div className="absolute inset-0 z-30 flex flex-col bg-[#f8fafc]" style={f}>
       <EditorHeader
+        primary="share"
         appIcon={artUiDesign}
         appName="딸깍 UI 디자인"
         currentAppId="uidesign"
@@ -310,7 +322,18 @@ export function UiDesignEditor({ onBack, onBellClick, onSwitchApp, profileMenu, 
         location="임시 보관함"
         saveState={saveState}
         // ▷ 프레젠테이션은 뺐다(2026-11-20): 안쪽 디자인 편집기 오른쪽 위에 자기 ▷가 있고, 그 편집기는 고칠 수 없다는 전제라 두 개가 겹친다
-        capabilities={{ share: true }}
+        capabilities={{ share: true, export: true }}
+        // 💾 · ⌘S: 자동 저장은 늘 되고, 💾는 지금 상태를 버전 기록에 "남긴 버전"으로 남긴다(2026-11-27). 이름은 기록 패널에서 제목을 더블클릭해 바꾼다
+        onSave={() => { setSaveState({ kind: "saving" }); window.setTimeout(() => { const ok = saveStore(files, threadsByFile); if (ok && activeFile) saveCurrent(activeFile.id, ""); setSaveState(ok ? { kind: "saved", at: Date.now() } : { kind: "error" }); showToast(ok ? "저장했어요. 버전 기록에 남겼어요." : "저장하지 못했어요. 이 브라우저 저장 공간이 부족해요.", ok ? "success" : "error"); }, 300); }}
+        exportOptions={{
+          title: "디자인 다운로드",
+          groups: [
+            { id: "format", label: "파일 형식", type: "radio", default: "png", options: [{ id: "png", label: "PNG" }, { id: "jpg", label: "JPG" }, { id: "svg", label: "SVG" }, { id: "pdf", label: "PDF" }] },
+            { id: "scale", label: "크기", type: "radio", default: "2", options: [{ id: "1", label: "1배" }, { id: "2", label: "2배" }, { id: "3", label: "3배" }] },
+            { id: "range", label: "범위", type: "radio", default: "selection", options: [{ id: "selection", label: "고른 프레임" }, { id: "page", label: "이 페이지 전체" }] },
+          ],
+          onExport: (c) => showToast(`${c.range === "page" ? "이 페이지 전체를" : "고른 프레임을"} ${String(c.format).toUpperCase()} ${c.scale}배로 내려받을게요.`),
+        }}
         viewers={viewers}
         profileMenu={profileMenu}
         onBack={onBack}
@@ -381,6 +404,7 @@ export function UiDesignEditor({ onBack, onBellClick, onSwitchApp, profileMenu, 
             onCommentMode={() => setDock("comments")}
             onExitCommentMode={() => { if (dockRef.current === "comments") setDock(null); }}
             commentPanelOpen={dock === "comments" && active === x.id}
+            onOpenThreadChange={reportOpenThread(x.id)}
             registerApi={register(x.id)}
             onSelection={onSelection}
           />
@@ -408,7 +432,11 @@ export function UiDesignEditor({ onBack, onBellClick, onSwitchApp, profileMenu, 
                   selectedId={versionSel}
                   onSelect={setVersionSel}
                   onRestore={(vid) => { restoreVersion(activeFile.id, vid); setDock("ai"); /* 되돌린 뒤 딸깍 AI 대화로 */ }}
-                  onSaveNow={(name) => { saveCurrent(activeFile.id, name); showToast(name ? `"${name}" 버전으로 남겼어요.` : "지금 상태를 남겼어요."); }}
+                  onRename={(vid, name) => {
+                    // 이름을 붙이면 그 줄은 남긴 버전. 빈 이름 = 이름 지우기(남긴 버전 표시는 그대로)
+                    setFiles((l) => l.map((x) => (x.id !== activeFile.id ? x : { ...x, versions: (x.versions ?? []).map((v) => (v.id === vid ? { ...v, saved: true, savedName: name } : v)) })));
+                    showToast(name ? "이름을 바꿨어요." : "이름을 지웠어요.");
+                  }}
                   onClose={() => setDock(null)}
                 />
               ) : null,

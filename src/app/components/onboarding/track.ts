@@ -17,6 +17,8 @@ export type TrackEvent =
   | "starter_follow"
   | "starter_skip"
   | "starter_complete"
+  | "starter_share_tip_view"
+  | "starter_share_tip_close"
   | "editor_hint_click"
   | "helper_hint_view"
   | "helper_hint_click"

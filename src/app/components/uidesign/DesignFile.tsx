@@ -40,6 +40,8 @@ export interface FileApi {
   runAi: (req: AiRequest, onStep: (l: string) => void, isCancelled: () => boolean) => Promise<AiResult>;
   planAi: (req: AiRequest) => string[];
   jumpTo: (t: Thread) => void;
+  /** 오른쪽 코멘트 목록 안에서 스레드를 그릴 때 쓰는 것(동작은 부를 때마다 최신 상태로) */
+  threadView: (t: Thread) => { actions: ThreadActions; members: Member[]; anchorLabel: string };
   attachSelection: () => AiAttachment | null;
   showResult: (r: AiResult) => void;
   undoResult: (r: AiResult) => void;
@@ -52,7 +54,7 @@ const LEFT_KEY = "ddalkkak.uidesign.leftPanel";
 const profileEmail = getProfile().email;
 
 export function DesignFile({
-  initialDoc, active, me, threads, setThreads, pinsHidden, togglePins, onCommentMode, onExitCommentMode, commentPanelOpen, registerApi, onSelection, onDocChange, shell, kind = "design",
+  initialDoc, active, me, threads, setThreads, pinsHidden, togglePins, onCommentMode, onExitCommentMode, commentPanelOpen, onOpenThreadChange, registerApi, onSelection, onDocChange, shell, kind = "design",
 }: {
   initialDoc: Doc;
   /** board = 피그잼형 보드(2026-11-20): 점 배경, 보드 도구(스티커 메모, 연결선 …), 타이머. dev 보드처럼 오른쪽 속성 패널 없음(고를 때마다 패널이 열려 캔버스가 줄어드는 게 어색했다) */
@@ -69,6 +71,8 @@ export function DesignFile({
   onExitCommentMode?: () => void;
   /** 상단 💬로 코멘트 목록이 열려 있으면 이 파일도 코멘트 모드(2026-11-20: 툴바 말풍선을 빼고 상단 💬 하나로) */
   commentPanelOpen?: boolean;
+  /** 열린 스레드가 바뀔 때(목록이 열려 있으면 셸이 목록 안에 그린다) */
+  onOpenThreadChange?: (id: string | null) => void;
   registerApi: (api: FileApi) => void;
   onSelection: (label: string | null) => void;
   /** 문서가 바뀔 때마다 — 셸이 "내 파일" 썸네일·저장·다시 열기에 쓴다 */
@@ -136,6 +140,9 @@ export function DesignFile({
     if (!commentPanelOpen && tool === "comment") { setToolRaw("move"); setDraft(null); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commentPanelOpen, active]);
+  // 목록에서 보던 스레드는 목록을 닫으면 같이 닫는다(닫자마자 캔버스 팝오버로 튀어나오지 않게)
+  useEffect(() => { if (active && !commentPanelOpen) setOpenThreadId(null); }, [commentPanelOpen, active]);
+  useEffect(() => { onOpenThreadChange?.(openThreadId); }, [openThreadId, onOpenThreadChange]);
 
   const selected = selectedId ? doc.nodes[selectedId] ?? null : null;
   useEffect(() => { if (active) onSelection(selected?.name ?? null); }, [active, selected?.name, onSelection]);
@@ -388,6 +395,7 @@ export function DesignFile({
       setOpenThreadId(t.id);
       setThreads((all) => all.map((x) => (x.id === t.id ? { ...x, readAt: Date.now(), forcedUnread: false } : x)));
     },
+    threadView: (t) => ({ actions: threadActions(t), members, anchorLabel: anchorLabel(t) }),
     attachSelection: () => {
       const sel = selectedRef.current;
       const n = sel ? docRef.current.nodes[sel] : null;
@@ -416,6 +424,13 @@ export function DesignFile({
   // 셸에는 항상 최신 함수를 부르는 얇은 래퍼를 한 번만 넘긴다
   const stableApi = useMemo<FileApi>(() => ({
     runAi: (...a) => apiRef.current.runAi(...a), planAi: (r) => apiRef.current.planAi(r), jumpTo: (t) => apiRef.current.jumpTo(t),
+    threadView: (t) => {
+      const v = apiRef.current.threadView(t);
+      // 동작은 누르는 순간의 최신 상태로(되돌리기 스냅숏이 한 박자 늦지 않게)
+      const keys = Object.keys(v.actions) as (keyof ThreadActions)[];
+      const actions = Object.fromEntries(keys.map((k) => [k, (...a: unknown[]) => (apiRef.current.threadView(t).actions[k] as (...x: unknown[]) => void)(...a)])) as unknown as ThreadActions;
+      return { ...v, actions };
+    },
     attachSelection: () => apiRef.current.attachSelection(), showResult: (r) => apiRef.current.showResult(r), undoResult: (r) => apiRef.current.undoResult(r),
     clearSelection: () => apiRef.current.clearSelection(),
   }), []);
@@ -631,7 +646,7 @@ export function DesignFile({
           draft={draft} setDraft={setDraft} me={me}
           onCreateThread={createThread} threadActions={threadActions} members={members} anchorLabel={anchorLabel}
           draftFor={(id) => threads.find((x) => x.id === id)?.myDraft ?? ""} onMoveThread={moveThread}
-          pinsHidden={pinsHidden} aiCursorNodeId={aiCursor} aiBuildingId={aiBuilding}
+          pinsHidden={pinsHidden} threadInPanel={!!commentPanelOpen} aiCursorNodeId={aiCursor} aiBuildingId={aiBuilding}
           votes={vote?.mine}
           {...(vote && !vote.ended ? {
             voteTargetOf: (id: string) => voteTarget(doc, id, vote.target),

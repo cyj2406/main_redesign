@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from "react";
-import { Bookmark, History, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { History, Pencil } from "lucide-react";
 
 import { color, f, editorType } from "@/app/styleTokens";
 
 import { PanelCloseButton } from "./SideDock";
+import { IconTooltip } from "@/app/components/viewer/IconTooltip";
 
 /**
  * 버전 기록 패널(에디터 공통) — 상단 바 🕘로 여는 오른쪽 패널. 기획: docs/editor-common-header.md "24".
@@ -17,7 +18,9 @@ import { PanelCloseButton } from "./SideDock";
  *  - 지금 상태인 줄에 현재 뱃지. 따로 "현재 버전" 줄을 두지 않는다
  *  - 되돌리기는 줄을 새로 만들지 않는다(사용자 "되돌림도 꼭 기록해야 하나, 헷갈린다"): 고른 줄로 현재 뱃지가 옮겨 가고,
  *    그 뒤에 고치면 맨 위에 새 줄이 생긴다. 위에 있던 줄은 그대로 남아 언제든 다시 돌아갈 수 있다
- *  - 남기기: 원래 딸깍넷 편집기 기록 창에 있던 기능. [현재] 줄을 누르면 [이름 붙여 남기기] → 이름(안 적어도 됨) → 그 줄에 "남긴 버전" 뱃지.
+ *  - 남기기는 상단 💾(⌘S)가 한다(2026-11-27). 패널 안 [이름 붙여 남기기 · 이름 바꿔 남기기]는 뺐다(사용자 "저장 버튼이 있는데 굳이?").
+ *  - 이름 바꾸기: 제목을 더블클릭하거나 마우스를 올리면 나오는 ✏를 누르면 그 자리에서 고친다. Enter · 바깥 클릭 = 저장, Esc = 취소.
+ *    이름을 붙이면 그 줄은 "남긴 버전"이 된다. 이름을 지우면 원래 제목으로 돌아간다(남긴 버전 표시는 그대로).
  *    [전체 · 남긴 버전] 탭은 다시 넣지 않는다(사용자 "최대한 심플한 플로우")
  *  - 파일 하나의 기록이라 함께 편집하는 사람 모두의 기록이 같이 쌓인다(Google 문서 · Figma와 같음). 되돌려도 아무 줄도 지우지 않는다
  */
@@ -51,7 +54,7 @@ const dayLabel = (ts: number) => {
 /** 되돌림 제목용: "오늘 오후 2:19" · "11월 18일 오후 2:19" */
 export const whenLabel = (ts: number) => `${dayLabel(ts)} ${clockLabel(ts)}`;
 
-export function VersionHistoryPanel({ items, currentId: currentIdProp, emptyText, selectedId, onSelect, onRestore, onSaveNow, onClose }: {
+export function VersionHistoryPanel({ items, currentId: currentIdProp, emptyText, selectedId, onSelect, onRestore, onRename, onClose }: {
   /** 최신순. 첫 줄이 지금 상태 */
   items: VersionItem[];
   /** 지금 상태인 줄. 없으면 첫 줄(되돌린 뒤에는 아래 줄이 현재가 된다) */
@@ -62,14 +65,11 @@ export function VersionHistoryPanel({ items, currentId: currentIdProp, emptyText
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onRestore: (id: string) => void;
-  /** [지금 상태 남기기]. 이름은 비어 있을 수 있다 */
-  onSaveNow: (name: string) => void;
+  /** 줄 이름 바꾸기(그 줄을 남긴 버전으로). 빈 이름 = 이름 지우기 */
+  onRename: (id: string, name: string) => void;
   onClose: () => void;
 }) {
-  const [naming, setNaming] = useState(false);
-  const [name, setName] = useState("");
-  const close = () => { setNaming(false); setName(""); };
-  const save = () => { onSaveNow(name.trim()); close(); };
+  const [editing, setEditing] = useState<string | null>(null);
   const shown = items;
   const currentId = currentIdProp ?? items[0]?.id;
   const groups: { day: string; list: VersionItem[] }[] = [];
@@ -98,26 +98,26 @@ export function VersionHistoryPanel({ items, currentId: currentIdProp, emptyText
               const isCurrent = v.id === currentId;
               const sel = selectedId === v.id;
               return (
-                <Row key={v.id} selected={sel} onClick={() => { close(); onSelect(sel ? null : v.id); }}
+                <Row key={v.id} selected={sel && !isCurrent}
+                  // 현재 줄은 할 일이 없어(남기기는 상단 💾) 눌러도 고르지 않는다
+                  onClick={() => { if (editing) return; onSelect(sel || isCurrent ? null : v.id); }}
                   head={v.savedName || v.title}
+                  editing={editing === v.id}
+                  onStartEdit={() => setEditing(v.id)}
+                  onEndEdit={(next) => {
+                    setEditing(null);
+                    if (next === null) return;
+                    const t = next.trim();
+                    if (t === (v.savedName ?? "") || (!v.savedName && t === v.title)) return;
+                    onRename(v.id, t === v.title ? "" : t);
+                  }}
                   badges={<>{isCurrent && <Badge tone="brand">현재</Badge>}{v.saved && <Badge>남긴 버전</Badge>}</>}
                   desc={`${v.savedName ? `${v.title} · ` : ""}${v.author} · ${clockLabel(v.at)}`}>
-                  {sel && (isCurrent ? (naming ? (
-                    <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); save(); }} className="mt-2 flex items-center gap-1 h-9 pl-2.5 pr-1 rounded-lg bg-white" style={{ boxShadow: `inset 0 0 0 1px ${color.border.focus}` }}>
-                      <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") close(); }}
-                        placeholder="버전 이름 (안 적어도 돼요)" aria-label="버전 이름" className="field-inline flex-1 min-w-0 bg-transparent outline-none" style={{ ...f, fontSize: editorType.body, color: "#111827" }} />
-                      <button type="submit" className="h-7 px-2.5 rounded-md" style={{ background: color.brand, color: "#fff", fontSize: editorType.label, fontWeight: 700 }}>남기기</button>
-                      <button type="button" aria-label="취소" onClick={close} className="size-7 flex items-center justify-center rounded-md hover:bg-black/[0.05]"><X size={14} color="#64748b" /></button>
-                    </form>
-                  ) : (
-                    <button type="button" onClick={(e) => { e.stopPropagation(); setNaming(true); }} className="mt-1 h-7 rounded inline-flex items-center gap-1 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ fontSize: editorType.label, fontWeight: 600, color: color.brand }}>
-                      <Bookmark size={13} />{v.saved ? "이름 바꿔 남기기" : "이름 붙여 남기기"}
-                    </button>
-                  )) : (
+                  {sel && !isCurrent && (
                     <button type="button" onClick={(e) => { e.stopPropagation(); onRestore(v.id); }} title="다른 버전은 그대로 남아서 언제든 다시 돌아올 수 있어요" className="mt-1 h-7 rounded outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ fontSize: editorType.label, fontWeight: 600, color: color.brand }}>
                       이 버전으로 되돌리기
                     </button>
-                  ))}
+                  )}
                 </Row>
               );
             })}
@@ -129,17 +129,46 @@ export function VersionHistoryPanel({ items, currentId: currentIdProp, emptyText
 }
 
 function Badge({ children, tone }: { children: ReactNode; tone?: "brand" }) {
-  return <span className="shrink-0 h-5 px-1.5 rounded inline-flex items-center" style={{ fontSize: 11, fontWeight: 700, color: tone === "brand" ? color.brand : "#475569", background: tone === "brand" ? "#eef3ff" : "#f1f5f9" }}>{children}</span>;
+  // 회색 뱃지는 흰 바탕 + 테두리: 고른 줄(회색 바탕) 위에서도 묻히지 않게
+  return <span className="shrink-0 h-5 px-1.5 rounded inline-flex items-center" style={{ fontSize: 11, fontWeight: 700, color: tone === "brand" ? color.brand : "#475569", background: tone === "brand" ? "#eef3ff" : "#fff", boxShadow: tone === "brand" ? undefined : "inset 0 0 0 1px #e2e8f0" }}>{children}</span>;
 }
 
-function Row({ selected, onClick, head, badges, desc, children }: { selected: boolean; onClick: () => void; head: string; badges?: ReactNode; desc?: string; children?: ReactNode }) {
+function Row({ selected, onClick, head, badges, desc, children, editing, onStartEdit, onEndEdit }: {
+  selected: boolean; onClick: () => void; head: string; badges?: ReactNode; desc?: string; children?: ReactNode;
+  editing: boolean; onStartEdit: () => void;
+  /** null = 취소 */
+  onEndEdit: (name: string | null) => void;
+}) {
+  const [draft, setDraft] = useState(head);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (editing) { setDraft(head); requestAnimationFrame(() => inputRef.current?.select()); } }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div role="button" tabIndex={0} aria-pressed={selected} onClick={onClick} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
-      className="rounded-lg cursor-pointer hover:bg-[#f8fafc] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
+    <div role="button" tabIndex={0} aria-pressed={selected} onClick={onClick}
+      onKeyDown={(e) => { if (editing) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } else if (e.key === "F2") { e.preventDefault(); onStartEdit(); } }}
+      className="group rounded-lg cursor-pointer hover:bg-[#f8fafc] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
       style={{ padding: "8px 12px", background: selected ? "#f1f5f9" : undefined }}>
       <div className="flex items-center gap-1.5 min-w-0">
-        <p className="truncate" title={head} style={{ fontSize: editorType.body, fontWeight: 600, color: "#111827" }}>{head}</p>
-        {badges}
+        {editing ? (
+          <input
+            ref={inputRef} value={draft} onChange={(e) => setDraft(e.target.value)} aria-label="버전 이름"
+            onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") onEndEdit(draft); else if (e.key === "Escape") onEndEdit(null); }}
+            onBlur={() => onEndEdit(draft)}
+            className="flex-1 min-w-0 h-7 -my-1 -ml-1.5 px-1.5 rounded-md bg-white outline-none"
+            style={{ ...f, fontSize: editorType.body, fontWeight: 600, color: "#111827", boxShadow: `inset 0 0 0 1.5px ${color.border.focus}` }}
+          />
+        ) : (
+          <>
+            <p className="truncate" title={head} onDoubleClick={(e) => { e.stopPropagation(); onStartEdit(); }} style={{ fontSize: editorType.body, fontWeight: 600, color: "#111827" }}>{head}</p>
+            {badges}
+            <IconTooltip label="이름 바꾸기">
+              <button type="button" aria-label="이름 바꾸기" onClick={(e) => { e.stopPropagation(); onStartEdit(); }}
+                className="ml-auto shrink-0 size-6 -my-1 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-black/[0.06] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]">
+                <Pencil size={13} color="#64748b" />
+              </button>
+            </IconTooltip>
+          </>
+        )}
       </div>
       {desc && <p className="truncate" title={desc} style={{ fontSize: editorType.caption, lineHeight: "18px", color: "#64748b", marginTop: 1 }}>{desc}</p>}
       {children}

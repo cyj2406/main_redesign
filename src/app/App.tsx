@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Pin, PinOff, MoreHorizontal, Pencil, Trash2, ChevronRight as ChevronRightIcon, Clapperboard, FilePen, Frame as FrameIcon, MessageSquare, Presentation, type LucideIcon, Sparkles as SparklesIcon, HelpCircle, Settings as SettingsIcon, UserRound, Users, Mail, LogOut, Palette, Bell, Brain, Coins, CreditCard, Monitor, Sun, Moon, FileText, FileVideo, FileSpreadsheet, FileType2, Compass, Image as ImageIcon, X as XIcon, Play, Volume2, Maximize2, Minimize2, BookOpen, Search, Plus, Upload, Check } from "lucide-react";
+import { Pin, PinOff, MoreHorizontal, Pencil, Trash2, ChevronRight as ChevronRightIcon, Clapperboard, FilePen, Frame as FrameIcon, MessageSquare, Presentation, type LucideIcon, Sparkles as SparklesIcon, HelpCircle, Settings as SettingsIcon, UserRound, Users, Mail, LogOut, Palette, Bell, Building2, Plug, Brain, Coins, CreditCard, Monitor, Sun, Moon, FileText, FileVideo, FileSpreadsheet, FileType2, Compass, Image as ImageIcon, X as XIcon, Play, Volume2, Maximize2, Minimize2, BookOpen, Search, Plus, Upload, Check } from "lucide-react";
 
 // ── 공통 에셋 ──────────────────────────────────────────────────────────────────
 import svgPaths from "@/imports/새대화딸깍/svg-yz49hawimu";
@@ -51,7 +51,10 @@ import { findPlan, useSubscription } from "@/app/state/subscription";
 import { PricingPage, type PricingTab } from "@/app/components/pricing/PricingPage";
 import { SubscriptionCompletePage } from "@/app/components/pricing/SubscriptionCompletePage";
 import { SettingsCreditTab } from "@/app/components/settings/SettingsCreditTab";
-import { AiModelsSettings } from "@/app/components/settings/AiModelsSettings";
+import { AiConnectionSettings } from "@/app/components/settings/AiConnectionSettings";
+import { CompanySettings } from "@/app/components/settings/CompanySettings";
+import { OrgSettings } from "@/app/components/settings/OrgSettings";
+import { SettingsSectionHead as KitSectionHead } from "@/app/components/settings/SettingsKit";
 import { readRecentEditorFiles, renameEditorFile, deleteEditorFile, readChatOverrides, renameChat, hideChat, FILES_EVENT, type RecentEditorFile } from "@/app/state/recentEditorFiles";
 import { SettingsBillingTab } from "@/app/components/settings/SettingsBillingTab";
 import { MyPage } from "@/app/components/mypage/MyPage";
@@ -361,22 +364,16 @@ const memorySummary: MemorySummarySection[] = [
  */
 const FOOTER_MUTED = "#9ca3af";
 
-type SettingsTab = "화면 설정" | "알림" | "AI 모델" | "메모리" | "크레딧" | "구독 및 결제";
+export type SettingsTab = "화면 설정" | "알림" | "메모리" | "회사 정보" | "조직·사내 공유" | "AI 연결" | "크레딧" | "구독 및 결제";
 type MemoryFilter = "전체" | "사실" | "요약";
 
 // 설정 콘텐츠의 공통 섹션 헤더(제목 → 설명 → 컨트롤 순서를 모든 탭에서 동일하게 유지).
 // 모듈 스코프에 두어야 리렌더 때 입력 포커스가 끊기지 않는다.
 const NOTIF_PREF_KEY = "ddalkkak.settings.taskDoneNotif";
 
+// 2026-11-27: 설정 공통 조각(SettingsKit)으로 통일. 설명 글자를 muted(#9ca3af, 대비 2.5:1)에서 secondary(#64748b)로 올렸다.
 function SettingsSectionHead({ title, desc }: { title: string; desc?: string }) {
-  return (
-    <div>
-      <p style={{ ...f, fontWeight: 700, fontSize: 16, color: "#0a0a0a", letterSpacing: "-0.4px" }}>{title}</p>
-      {desc && (
-        <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", letterSpacing: "-0.2px", lineHeight: 1.6, marginTop: 6 }}>{desc}</p>
-      )}
-    </div>
-  );
+  return <KitSectionHead title={title} desc={desc} />;
 }
 
 // 업데이트 시점 칩 (기존 태그 칩과 동일한 톤)
@@ -450,8 +447,8 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
   const [factDraft, setFactDraft] = useState("");
   const [addingFact, setAddingFact] = useState(false);
 
-  // AI 모델(2026-11-19): 기본 AI(딸깍 AI 높음·보통·낮음) + 내 Claude·ChatGPT·Gemini 연결. docs/ai-models.md
-  const tabs: SettingsTab[] = ["화면 설정", "알림", "AI 모델", "메모리", "크레딧", "구독 및 결제"];
+  // 2026-11-27: 딸깍 데스크톱 설정 구성 반영(회사 정보 · 조직·사내 공유 · AI 연결). AI 연결이 예전 "AI 모델" 탭 자리를 대신한다.
+  const tabs: SettingsTab[] = ["화면 설정", "알림", "메모리", "회사 정보", "조직·사내 공유", "AI 연결", "크레딧", "구독 및 결제"];
 
   const memq = memQuery.trim();
   const visibleFacts = memFilter === "요약" ? [] : facts.filter((it) => !memq || it.text.includes(memq));
@@ -489,8 +486,10 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
   const tabIcons: Record<SettingsTab, React.ReactNode> = {
     "화면 설정": <Palette size={20} strokeWidth={1.7} />,
     "알림": <Bell size={20} strokeWidth={1.7} />,
-    "AI 모델": <SparklesIcon size={20} strokeWidth={1.7} />,
     "메모리": <Brain size={20} strokeWidth={1.7} />,
+    "회사 정보": <Building2 size={20} strokeWidth={1.7} />,
+    "조직·사내 공유": <Users size={20} strokeWidth={1.7} />,
+    "AI 연결": <Plug size={20} strokeWidth={1.7} />,
     "크레딧": <Coins size={20} strokeWidth={1.7} />,
     "구독 및 결제": <CreditCard size={20} strokeWidth={1.7} />,
   };
@@ -568,7 +567,7 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
         <div className="flex items-start justify-between px-5 pt-4 pb-4 shrink-0 wide:px-7 wide:pt-6 wide:pb-5 wide:border-b wide:border-[#f1f5f9]">
           <div>
             <p style={{ ...f, fontWeight: 700, fontSize: 20, color: "#0a0a0a", letterSpacing: "-0.6px" }}>설정</p>
-            <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", marginTop: 3, letterSpacing: "-0.2px" }}>딸깍의 외관과 동작을 설정합니다.</p>
+            <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", marginTop: 3, letterSpacing: "-0.2px" }}>딸깍의 화면과 동작을 정해요.</p>
           </div>
           {/* 닫기 — 데스크톱 모달 전용.
               바텀시트에는 그랩 핸들과 바깥 탭(backdrop)·Esc 가 이미 있어 X가 중복이고,
@@ -592,11 +591,23 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
               글자 크기는 클래스(wide:text-*)가 아니라 isDesktop 분기로 직접 정한다 —
               이 파일의 인라인 style은 항상 클래스보다 우선이라(Button.tsx 등에서 이미
               확인된 문제) wide: 접두사 클래스를 얹어도 인라인 fontSize에 덮여 무시된다. */}
-          <div className="shrink-0 px-4 pb-3 wide:w-[232px] wide:px-4 wide:py-5">
-            <div
-              className="flex wide:flex-col gap-0.5 wide:gap-1.5"
-              style={!isDesktop ? { background: "#f1f5f9", borderRadius: 16, padding: 4 } : undefined}
-            >
+          {/* 1200px 아래(2026-11-27): 탭이 8개로 늘자 회색 상자 속 아이콘 탭이 화면 밖으로 잘리고, 고른 탭(AI 연결 등)이
+              안 보이고, 아래 내용과 경계도 없었다 → 공통 밑줄 탭(ScrollableChips underline, 요금제 페이지와 같은 내비게이션 탭).
+              글자만, 고른 탭은 가운데로 스크롤, 아래 구분선으로 내용과 나눈다. */}
+          {!isDesktop && (
+            <div className="shrink-0 px-5" style={{ borderBottom: "1px solid #f1f5f9" }}>
+              <ScrollableChips
+                items={tabs}
+                activeIndex={tabs.indexOf(tab)}
+                onChange={(i) => setTab(tabs[i])}
+                variant="underline"
+                edgeClassName="-mx-5 px-5 gap-6"
+                centerActiveOnChange
+              />
+            </div>
+          )}
+          <div className={isDesktop ? "shrink-0 wide:w-[232px] wide:px-4 wide:py-5" : "hidden"}>
+            <div className="flex wide:flex-col gap-0.5 wide:gap-1.5">
               {tabs.map((t) => {
                 const selected = tab === t;
                 return (
@@ -605,7 +616,7 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
                     onClick={() => setTab(t)}
                     aria-current={selected ? "page" : undefined}
                     className={[
-                      "flex-1 wide:flex-none flex flex-col wide:flex-row items-center wide:justify-start gap-1 wide:gap-3",
+                      "flex-1 shrink-0 min-w-[72px] wide:min-w-0 wide:flex-none flex flex-col wide:flex-row items-center wide:justify-start gap-1 wide:gap-3",
                       "py-2.5 wide:py-0 transition-colors duration-150 outline-none",
                       "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff]",
                       isDesktop && !selected ? "hover:bg-[#f8fafc]" : "",
@@ -638,13 +649,13 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
               하단 여백은 마지막 요소(외관 탭의 "언어" 셀렉트)가 푸터 구분선에 붙지 않게 하는 몫이다. */}
           <div
             ref={contentRef}
-            className="flex-1 overflow-y-auto px-4 pb-10 wide:px-8 wide:pb-12 wide:border-l wide:border-[#f1f5f9]"
+            className="flex-1 overflow-y-auto px-5 pb-10 wide:px-8 wide:pb-12 wide:border-l wide:border-[#f1f5f9]"
             style={{ scrollbarWidth: "none", minHeight: 0, overscrollBehavior: "contain" }}
           >
           {/* 본문은 읽기 좋은 너비로 제한하고 좌측 시작선을 통일한다.
               상단 여백은 스크롤 컨테이너가 아니라 이 래퍼가 갖는다 —
               스크롤 컨테이너에 padding-top이 있으면 sticky 요소가 그만큼 아래에 붙어 콘텐츠가 비친다. */}
-          <div className="w-full wide:max-w-[720px] wide:pt-4">
+          <div className="w-full pt-5 wide:max-w-[720px] wide:pt-4">
 
           {/* ── 외관 ── */}
           {tab === "화면 설정" && (
@@ -920,7 +931,9 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
           )}
 
           {/* ── 크레딧·사용 내역 ── */}
-          {tab === "AI 모델" && <AiModelsSettings />}
+          {tab === "회사 정보" && <CompanySettings />}
+          {tab === "조직·사내 공유" && <OrgSettings />}
+          {tab === "AI 연결" && <AiConnectionSettings />}
 
           {tab === "크레딧" && (
             <SettingsCreditTab onTopUp={() => { onClose(); onOpenTopUp(); }} />
@@ -946,11 +959,11 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
         >
           <img alt="딸깍.net" className="h-3.5 w-auto object-contain grayscale opacity-40" src={imgImageNet} />
           <span className="font-mono rounded-[6px] px-1.5 py-0.5 bg-[#f1f5f9]"
-            style={{ fontSize: 12, lineHeight: 1.4, color: FOOTER_MUTED }}>v1.0.242</span>
+            style={{ fontSize: 12, lineHeight: 1.4, color: FOOTER_MUTED }}>v0.3.24</span>
           <span className="font-mono rounded-[6px] px-1.5 py-0.5 bg-[#f1f5f9]"
-            style={{ fontSize: 12, lineHeight: 1.4, color: FOOTER_MUTED }}>4cc9c46</span>
+            style={{ fontSize: 12, lineHeight: 1.4, color: FOOTER_MUTED }}>fb7fcbdff</span>
           <span className="hidden wide:inline" style={{ ...f, fontWeight: 400, fontSize: 12, color: FOOTER_MUTED }}>
-            Build: 2026. 07. 23. 오전 10:26
+            Build: 2026. 11. 26. 오전 10:37
           </span>
         </div>
       </div>
@@ -5847,7 +5860,7 @@ export default function App() {
           profileMenu={profileMenu}
           // 편집기 바꾸기 ▾ 없음(새 파일은 사이드바 ＋): 지금 홈 · B안 공통(2026-11-20). EditorHeader는 onSwitchApp이 없으면 아이콘 + 제목, 데스크톱에서 ‹ 숨김
           onSwitchApp={undefined}
-          onManageModels={() => openSettingsAt("AI 모델")}
+          onManageModels={() => openSettingsAt("AI 연결")}
         />
       )}
       {docEditor && (
@@ -5862,7 +5875,7 @@ export default function App() {
           profileMenu={profileMenu}
           // 편집기 바꾸기 ▾ 없음(새 파일은 사이드바 ＋): 지금 홈 · B안 공통(2026-11-20). EditorHeader는 onSwitchApp이 없으면 아이콘 + 제목, 데스크톱에서 ‹ 숨김
           onSwitchApp={undefined}
-          onManageModels={() => openSettingsAt("AI 모델")}
+          onManageModels={() => openSettingsAt("AI 연결")}
         />
       )}
       {workspace && (

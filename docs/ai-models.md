@@ -1,5 +1,8 @@
 # AI 모델 선택 기획 (2026-11-19)
 
+> **2026-11-27 바뀜**: 설정이 딸깍 데스크톱 구성으로 바뀌어 "AI 모델" 탭은 "AI 연결"(Codex CLI · Claude Code 구독 연결, `state/aiConnection.ts`)이 대신한다.
+> 입력창 모델 버튼도 그 목록을 쓴다(docs/design-system.md "설정 화면"). 아래 내용(딸깍 AI 높음·보통·낮음 + 내 키)은 기록으로 남겨 둔다.
+
 딸깍 AI는 **딸깍 기본 AI(높음 · 보통 · 낮음)**를 쓰고, 원하면 **내 Claude · ChatGPT · Gemini를 연결**해 그 모델로 시킬 수 있다.
 코드: `src/app/state/aiModels.ts`(상태) · `components/settings/AiModelsSettings.tsx`(설정 탭) · `editor-shell/AiAssistantPanel.tsx`(입력창 모델 선택).
 

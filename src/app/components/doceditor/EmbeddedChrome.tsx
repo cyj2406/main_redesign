@@ -19,7 +19,7 @@ import type { DocKind } from "./docTemplates";
  * 안쪽 오픈소스 에디터 모양 흉내(2026-11-20, 사용자가 보낸 dev 캡처 기준 · 동작 없음).
  * 실제 서비스에서는 이 자리에 오픈소스 에디터(워드 · 엑셀 · PPT = 오피스형, 한글 = 한글형, PDF = 도구형)가 들어온다.
  * 느낌을 보려는 용도라 모양만 그리고 화면 읽기 도구에는 숨긴다(aria-hidden). 아이콘은 lucide.
- *  - 워드 · 엑셀 · PPT: [자동 저장 · 저장 · 되돌리기 | 가운데 제목 | 검색 · 사용자] → 탭(파일 홈 삽입 …) → 리본 → (워드 눈금자 · 엑셀 수식 줄) … 아래 상태 줄
+ *  - 워드 · 엑셀 · PPT: 탭 줄([↶ ↷ | 파일 홈 삽입 …], 2026-11-27 맨 위 제목 줄을 뺀 목표 화면) → 리본 → (워드 눈금자 · 엑셀 수식 줄) … 아래 상태 줄
  *  - 한글: 메뉴(파일 편집 보기 입력 서식 쪽 표 도구) → 큰 아이콘 리본 → 서식 줄(바탕글 · 대표 · 함초롬바탕 · 10.0pt · 160%) → 눈금자 … 상태 줄
  *  - PDF: [홈 · + 열기] → [메뉴 · 모든 도구 읽기 편집 변환 전자 서명 · 도구 찾기] → 왼쪽 도구 목록 + 환영 화면(추천 도구 · 최근 항목)
  */
@@ -30,37 +30,12 @@ const OFFICE_ACCENT: Record<string, string> = { word: "#2b6ce6", excel: "#1f8a50
 
 /* ───────────── 오피스형(워드 · 엑셀 · PPT) ───────────── */
 
-function OfficeTitleBar({ kind, title }: { kind: "word" | "excel" | "ppt"; title: string }) {
-  const accent = OFFICE_ACCENT[kind];
-  return (
-    <div className="h-10 flex items-center gap-2 px-3 shrink-0" style={{ background: "#f6f7f9", borderBottom: "1px solid #e5e7eb" }}>
-      {kind === "ppt" ? (
-        <>
-          <Home size={16} color="#475569" /><Save size={16} color={accent} /><FileOutput size={16} color="#475569" /><Undo2 size={16} color="#94a3b8" /><Redo2 size={16} color="#94a3b8" /><MonitorPlay size={16} color="#475569" /><ChevronDown size={14} color="#475569" />
-        </>
-      ) : (
-        <>
-          <span className="shrink-0" style={{ ...T, color: "#64748b" }}>자동 저장</span>
-          <span className="w-7 h-4 rounded-full relative" style={{ background: "#cbd5e1" }}><span className="absolute left-0.5 top-0.5 size-3 rounded-full bg-white" /></span>
-          <Save size={16} color="#475569" className="ml-2" /><Undo2 size={16} color="#475569" /><ChevronDown size={12} color="#94a3b8" /><Redo2 size={16} color="#475569" /><MoreHorizontal size={16} color="#475569" />
-        </>
-      )}
-      <span className="flex-1 min-w-0 text-center truncate" style={{ ...T, fontSize: 13, fontWeight: 600, color: "#111827" }}>{title} — 저장됨</span>
-      {kind === "ppt" ? (
-        <>
-          <Palette size={16} color="#475569" /><MessageSquare size={16} color="#475569" />
-          <span className="h-7 px-5 rounded-full flex items-center" style={{ background: accent, color: "#fff", fontSize: 12.5, fontWeight: 600 }}>발표</span>
-          <Search size={16} color="#475569" />
-        </>
-      ) : (
-        <>
-          <span className="shrink min-w-0 h-7 w-[240px] rounded-md flex items-center gap-1.5 px-2" style={{ background: "#fff", boxShadow: "inset 0 0 0 1px #e5e7eb", color: "#94a3b8", fontSize: 12 }}><Search size={13} />명령 및 도움말 검색</span>
-          <span className="size-7 rounded-full flex items-center justify-center" style={{ background: accent, color: "#fff", fontSize: 11, fontWeight: 700 }}>I</span>
-        </>
-      )}
-    </div>
-  );
-}
+/*
+ * 맨 위 제목 줄(자동 저장 · 💾 · 되돌리기 | "제목 — 저장됨" | 검색 · 사용자)은 그리지 않는다(2026-11-27, 목표 화면).
+ * 딸깍 헤더와 저장 · 파일 이름 · 프로필이 위아래로 두 번 보였다. 실제 에디터에서 숨길 수 있는지는 개발 확인 필요
+ * (ONLYOFFICE 계열이면 머리 줄을 탭 줄로 합치는 compactHeader, 파일 이름 숨기는 toolbarHideFileName 같은 설정이 있는 것으로 안다. docs/editor-overlaps.md 12).
+ * 되돌리기 · 다시 하기는 탭 줄 왼쪽으로, PPT [발표]는 탭 줄 오른쪽으로 옮겼다. 자동 저장은 늘 켜 두므로 스위치가 필요 없다.
+ */
 
 const OFFICE_TABS: Record<string, string[]> = {
   word: ["파일", "홈", "삽입", "그리기", "디자인", "레이아웃", "참조", "편지", "검토", "보기", "도움말"],
@@ -71,17 +46,27 @@ const OFFICE_TABS: Record<string, string[]> = {
 function OfficeTabs({ kind }: { kind: "word" | "excel" | "ppt" }) {
   const accent = OFFICE_ACCENT[kind];
   return (
-    <div className="h-9 flex items-end gap-5 px-4 shrink-0 overflow-hidden" style={{ background: "#f6f7f9" }}>
-      {OFFICE_TABS[kind].map((t) => (
-        <span key={t} className="pb-2 relative shrink-0" style={{ ...T, fontSize: 13, color: t === "홈" ? accent : "#334155", fontWeight: t === "홈" ? 600 : 400 }}>
-          {t}{t === "홈" && <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 w-4 h-0.5 rounded-full" style={{ background: accent }} />}
-        </span>
-      ))}
+    <div className="h-10 flex items-end gap-5 px-4 shrink-0 overflow-hidden" style={{ background: "#f6f7f9" }}>
+      <span className="mb-2 flex items-center gap-2.5 shrink-0 pr-4" style={{ borderRight: "1px solid #e2e8f0" }}>
+        <Undo2 size={16} color="#475569" /><Redo2 size={16} color="#94a3b8" />
+      </span>
+      {/* 좁으면 탭 이름이 먼저 잘리고, 오른쪽 [발표] · [편집]은 늘 보인다 */}
+      <span className="flex-1 min-w-0 flex items-end gap-5 overflow-hidden">
+        {OFFICE_TABS[kind].map((t) => (
+          <span key={t} className="pb-2 relative shrink-0" style={{ ...T, fontSize: 13, color: t === "홈" ? accent : "#334155", fontWeight: t === "홈" ? 600 : 400 }}>
+            {t}{t === "홈" && <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 w-4 h-0.5 rounded-full" style={{ background: accent }} />}
+          </span>
+        ))}
+      </span>
+      {/* 워드 안쪽 [댓글] · [공유]는 딸깍 코멘트 · 공유와 겹쳐 목표 화면에서 뺐다(docs/editor-overlaps.md 3, 4). 편집 모드는 안쪽에만 있는 기능이라 둔다 */}
       {kind === "word" && (
-        <span className="ml-auto mb-1.5 flex items-center gap-1.5 shrink-0">
-          <span className="h-7 px-2.5 rounded-md flex items-center gap-1" style={{ ...T, boxShadow: "inset 0 0 0 1px #cbd5e1", background: "#fff" }}><MessageSquareText size={13} />댓글</span>
+        <span className="mb-1.5 flex items-center gap-1.5 shrink-0">
           <span className="h-7 px-2.5 rounded-md flex items-center gap-1" style={{ ...T, boxShadow: "inset 0 0 0 1px #cbd5e1", background: "#fff" }}><Pencil size={13} />편집<ChevronDown size={12} /></span>
-          <span className="h-7 px-2.5 rounded-md flex items-center gap-1" style={{ ...T, background: accent, color: "#fff" }}><Share size={13} />공유</span>
+        </span>
+      )}
+      {kind === "ppt" && (
+        <span className="mb-1.5 flex items-center gap-1.5 shrink-0">
+          <span className="h-7 px-4 rounded-full flex items-center gap-1" style={{ ...T, background: accent, color: "#fff", fontWeight: 600 }}><MonitorPlay size={13} />발표</span>
         </span>
       )}
     </div>
@@ -231,7 +216,6 @@ export function EmbeddedTop({ kind, title }: { kind: DocKind; title: string }) {
   if (kind === "word" || kind === "excel" || kind === "ppt") {
     return (
       <div aria-hidden className="whitespace-nowrap overflow-hidden" style={{ background: "#f6f7f9" }}>
-        <OfficeTitleBar kind={kind} title={title} />
         <OfficeTabs kind={kind} />
         <OfficeRibbon kind={kind} />
         {kind === "word" && <Ruler />}

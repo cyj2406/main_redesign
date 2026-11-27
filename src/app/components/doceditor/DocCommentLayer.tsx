@@ -22,75 +22,15 @@ export function useDocCommentMembers(me: CommentAuthor): Member[] {
 /** 놓은 자리를 다듬는 규칙: 엑셀은 칸 모서리에 붙이고 "Sheet1 · B3"처럼 이름을 준다. null이면 그 자리에 둘 수 없음 */
 export type DocCommentSnap = (layer: HTMLElement, clientX: number, clientY: number) => { x: number; y: number; place?: string } | null;
 
-/** 엑셀 시트 목업용: 포인터 아래 data-cell 칸을 찾아 그 칸 오른쪽 위 모서리에 핀 끝을 붙인다(엑셀 메모 표시 자리) */
-export const snapToSheetCell: DocCommentSnap = (layer, cx, cy) => {
-  const cell = document.elementsFromPoint(cx, cy).find((el) => (el as HTMLElement).dataset?.cell) as HTMLElement | undefined;
-  if (!cell) return null;
-  const r = layer.getBoundingClientRect(), c = cell.getBoundingClientRect();
-  return { x: Math.round(c.right - r.left - 6), y: Math.round(c.top - r.top + 6), place: `Sheet1 · ${cell.dataset.cell}` };
-};
-
-export function DocCommentLayer({ threads, setThreads, me, members, anchorLabel = "1쪽", commentMode, exitCommentMode, openThreadId, setOpenThreadId, pinsHidden, snap }: {
-  threads: DocThread[];
-  setThreads: (u: SetStateAction<DocThread[]>) => void;
-  me: CommentAuthor;
-  members: Member[];
-  /** 위치 표시 — 문서 "1쪽", 시트 "Sheet1" */
-  anchorLabel?: string;
-  commentMode: boolean;
-  exitCommentMode: () => void;
-  openThreadId: string | null;
-  setOpenThreadId: (id: string | null) => void;
-  pinsHidden: boolean;
-  /** 놓은 자리 다듬기(엑셀 칸 붙이기). 없으면 클릭한 점 그대로 */
-  snap?: DocCommentSnap;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [draft, setDraft] = useState<{ x: number; y: number; place?: string } | null>(null);
-  // 핀 옮기기(UI 디자인과 같은 규칙): 3px 넘게 움직이면 옮기기, 아니면 열기. 작성자만 옮길 수 있고 남의 핀은 안내만.
-  const [pinDrag, setPinDrag] = useState<{ id: string; x: number; y: number } | null>(null);
-  const [bounds, setBounds] = useState({ w: 680, h: 880 });
-  const demoReplied = useRef(threads.length > 0);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setBounds({ w: el.offsetWidth, h: el.offsetHeight }));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  // Esc: 새 코멘트 닫기 → 코멘트 모드 나가기(열린 스레드는 ThreadPopover가 스스로 닫는다)
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || openThreadId) return;
-      if (draft) setDraft(null); else if (commentMode) exitCommentMode();
-    };
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
-  }, [draft, commentMode, openThreadId, exitCommentMode]);
-  useEffect(() => { if (!commentMode) setDraft(null); }, [commentMode]);
-
-  const patch = (id: string, fn: (t: DocThread) => DocThread) => setThreads((all) => all.map((t) => (t.id === id ? fn(t) : t)));
+/**
+ * 열린 스레드의 동작(답글 · 해결 · 삭제 …). 문서 위 팝오버와 오른쪽 코멘트 목록(답글 보기)이 같은 동작을 쓴다.
+ */
+export function docThreadActions(t: DocThread, { threads, setThreads, me, setOpenThreadId }: {
+  threads: DocThread[]; setThreads: (u: SetStateAction<DocThread[]>) => void; me: CommentAuthor; setOpenThreadId: (id: string | null) => void;
+}): ThreadActions {
+  const patch = (id: string, fn: (t: DocThread) => DocThread) => setThreads((all) => all.map((x) => (x.id === id ? fn(x) : x)));
   const restore = (snap: DocThread[]) => setThreads(snap);
-  const create = (text: string, images: string[]) => {
-    if (!draft) return;
-    const now = Date.now();
-    const t: DocThread = {
-      id: uid("t"), number: threads.reduce((m, x) => Math.max(m, x.number), 0) + 1, pageId: "p1", frameId: null, x: draft.x, y: draft.y,
-      place: draft.place, resolved: false, readAt: now, messages: [{ id: uid("m"), author: me, text, createdAt: now, images: images.length ? images : undefined }],
-    };
-    setThreads((all) => [...all, t]);
-    setDraft(null);
-    setOpenThreadId(t.id);
-    // DEMO_: 읽지 않음·멘션 흐름을 보여 주는 예시 팀원 답글 — 문서마다 첫 스레드에 한 번만(UI 디자인 에디터와 같음)
-    if (!demoReplied.current) {
-      demoReplied.current = true;
-      window.setTimeout(() => {
-        patch(t.id, (x) => ({ ...x, messages: [...x.messages, { id: uid("m"), author: DEMO_TEAMMATE, text: `@${me.name} 확인했어요! 문서에 반영할게요 👍`, createdAt: Date.now() }] }));
-        showToast(`${DEMO_TEAMMATE.name}님이 회원님을 멘션했어요.`);
-      }, 4000);
-    }
-  };
-  const actions = (t: DocThread): ThreadActions => ({
+  return {
     onClose: () => setOpenThreadId(null),
     onReply: (text, images) => patch(t.id, (x) => ({ ...x, readAt: Date.now(), myDraft: undefined, messages: [...x.messages, { id: uid("m"), author: me, text, createdAt: Date.now(), images: images.length ? images : undefined }] })),
     onResolve: (r) => {
@@ -120,7 +60,79 @@ export function DocCommentLayer({ threads, setThreads, me, members, anchorLabel 
     onMarkUnread: () => { patch(t.id, (x) => ({ ...x, forcedUnread: true })); setOpenThreadId(null); showToast("읽지 않음으로 표시했어요."); },
     onCopyLink: () => { void navigator.clipboard?.writeText(`${window.location.origin}${window.location.pathname}#comment-${t.number}`).catch(() => {}); showToast("코멘트 링크를 복사했어요."); },
     onDraft: (text) => patch(t.id, (x) => ({ ...x, myDraft: text.trim() ? text : undefined })),
-  });
+  };
+}
+
+/** 엑셀 시트 목업용: 포인터 아래 data-cell 칸을 찾아 그 칸 오른쪽 위 모서리에 핀 끝을 붙인다(엑셀 메모 표시 자리) */
+export const snapToSheetCell: DocCommentSnap = (layer, cx, cy) => {
+  const cell = document.elementsFromPoint(cx, cy).find((el) => (el as HTMLElement).dataset?.cell) as HTMLElement | undefined;
+  if (!cell) return null;
+  const r = layer.getBoundingClientRect(), c = cell.getBoundingClientRect();
+  return { x: Math.round(c.right - r.left - 6), y: Math.round(c.top - r.top + 6), place: `Sheet1 · ${cell.dataset.cell}` };
+};
+
+export function DocCommentLayer({ threads, setThreads, me, members, anchorLabel = "1쪽", commentMode, exitCommentMode, openThreadId, setOpenThreadId, pinsHidden, threadInPanel = false, snap }: {
+  threads: DocThread[];
+  setThreads: (u: SetStateAction<DocThread[]>) => void;
+  me: CommentAuthor;
+  members: Member[];
+  /** 위치 표시 — 문서 "1쪽", 시트 "Sheet1" */
+  anchorLabel?: string;
+  commentMode: boolean;
+  exitCommentMode: () => void;
+  openThreadId: string | null;
+  setOpenThreadId: (id: string | null) => void;
+  pinsHidden: boolean;
+  /** 오른쪽 코멘트 목록이 열려 있어 스레드를 거기서 보여 준다. 이때는 문서 위 팝오버를 띄우지 않는다 */
+  threadInPanel?: boolean;
+  /** 놓은 자리 다듬기(엑셀 칸 붙이기). 없으면 클릭한 점 그대로 */
+  snap?: DocCommentSnap;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useState<{ x: number; y: number; place?: string } | null>(null);
+  // 핀 옮기기(UI 디자인과 같은 규칙): 3px 넘게 움직이면 옮기기, 아니면 열기. 작성자만 옮길 수 있고 남의 핀은 안내만.
+  const [pinDrag, setPinDrag] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [bounds, setBounds] = useState({ w: 680, h: 880 });
+  const demoReplied = useRef(threads.length > 0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setBounds({ w: el.offsetWidth, h: el.offsetHeight }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // Esc: 새 코멘트 닫기 → 코멘트 모드 나가기(열린 스레드는 ThreadPopover가 스스로 닫는다)
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || openThreadId) return;
+      if (draft) setDraft(null); else if (commentMode) exitCommentMode();
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [draft, commentMode, openThreadId, exitCommentMode]);
+  useEffect(() => { if (!commentMode) setDraft(null); }, [commentMode]);
+
+  const patch = (id: string, fn: (t: DocThread) => DocThread) => setThreads((all) => all.map((t) => (t.id === id ? fn(t) : t)));
+  const create = (text: string, images: string[]) => {
+    if (!draft) return;
+    const now = Date.now();
+    const t: DocThread = {
+      id: uid("t"), number: threads.reduce((m, x) => Math.max(m, x.number), 0) + 1, pageId: "p1", frameId: null, x: draft.x, y: draft.y,
+      place: draft.place, resolved: false, readAt: now, messages: [{ id: uid("m"), author: me, text, createdAt: now, images: images.length ? images : undefined }],
+    };
+    setThreads((all) => [...all, t]);
+    setDraft(null);
+    setOpenThreadId(t.id);
+    // DEMO_: 읽지 않음·멘션 흐름을 보여 주는 예시 팀원 답글 — 문서마다 첫 스레드에 한 번만(UI 디자인 에디터와 같음)
+    if (!demoReplied.current) {
+      demoReplied.current = true;
+      window.setTimeout(() => {
+        patch(t.id, (x) => ({ ...x, messages: [...x.messages, { id: uid("m"), author: DEMO_TEAMMATE, text: `@${me.name} 확인했어요! 문서에 반영할게요 👍`, createdAt: Date.now() }] }));
+        showToast(`${DEMO_TEAMMATE.name}님이 회원님을 멘션했어요.`);
+      }, 4000);
+    }
+  };
+  const actions = (t: DocThread) => docThreadActions(t, { threads, setThreads, me, setOpenThreadId });
 
   const toggleOpen = (t: DocThread) => { setDraft(null); setOpenThreadId(t.id === openThreadId ? null : t.id); if (t.id !== openThreadId) patch(t.id, (x) => ({ ...x, readAt: Date.now(), forcedUnread: false })); };
   const pressPin = (e: ReactPointerEvent, t: DocThread) => {
@@ -163,10 +175,12 @@ export function DocCommentLayer({ threads, setThreads, me, members, anchorLabel 
     window.addEventListener("mouseup", up);
   };
 
-  const open = threads.find((t) => t.id === openThreadId) ?? null;
+  // 숨김(눈 끔)이면 핀과 함께 팝오버도 감춘다. 목록이 열려 있으면 스레드는 목록에서 본다
+  const open = (!pinsHidden && !threadInPanel && threads.find((t) => t.id === openThreadId)) || null;
   return (
     <div ref={ref} className="absolute inset-0" style={{ pointerEvents: commentMode || draft || open ? "auto" : "none", cursor: commentMode ? "crosshair" : undefined }}
       onPointerDown={(e) => {
+        // 팝오버가 떠 있으면 바깥 클릭은 닫기. 목록에서 스레드를 보는 중(open 없음)이면 바로 새 코멘트를 시작한다
         if (open) { setOpenThreadId(null); return; }
         if (!commentMode || e.target !== e.currentTarget) return;
         // 빈 곳 mousedown의 기본 동작(포커스를 body로)을 막아야 새 코멘트 입력칸 자동 포커스가 남는다

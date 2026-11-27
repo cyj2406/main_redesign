@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ArrowUp, Bell, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, FileText, Frame, FolderOpen, Image as ImageIcon, MessagesSquare, Loader2, MessageSquarePlus, Plus, Scan, Sparkles, Square, Trash2, Upload, X, Zap, ListChecks, Crosshair, Copy, BookOpen, Paperclip, FolderPlus } from "lucide-react";
 
 import { showToast } from "@/app/components/common/Toast";
-import { TIERS, isOwnKey, modelLabel, ownModels, useAiModels, validModel, type ModelId } from "@/app/state/aiModels";
+import type { ModelId } from "@/app/state/aiModels";
+import {
+  AGENT_NAME, CLAUDE_MODELS, CODEX_MODELS, isConnectionModel, panelDefault, panelModelId, panelModelLabel, useAiConnection, validPanelModel,
+  type AgentId,
+} from "@/app/state/aiConnection";
 import { color, f, editorType } from "@/app/styleTokens";
 
 import { PanelCloseButton } from "./SideDock";
@@ -104,10 +108,10 @@ export function AiAssistantPanel({
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<AiAttachment[]>([]);
   const mode: RunMode = "auto";
-  // 모델: 새 대화는 설정의 기본 AI로 시작하고, 이 대화에서 바꾼 건 대화가 끝날 때까지 유지(docs/ai-models.md "2-1")
-  const models = useAiModels();
-  const [modelRaw, setModel] = useState<ModelId>(models.defaultModel);
-  const model = validModel(modelRaw, models);
+  // 모델(2026-11-27): 설정 › AI 연결 기준. 새 대화는 채팅을 맡은 AI와 그 모델로 시작하고, 이 대화에서 바꾼 건 대화가 끝날 때까지 유지
+  const conn = useAiConnection();
+  const [modelRaw, setModel] = useState<ModelId | null>(() => panelDefault(conn));
+  const model = validPanelModel(modelRaw, conn);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [running, setRunning] = useState(false);
   const [menu, setMenu] = useState<null | "plus" | "mode" | "model" | "history">(null);
@@ -177,7 +181,7 @@ export function AiAssistantPanel({
   const send = (text = input) => {
     const t = text.trim();
     if (!t) return;
-    const req: AiRequest = { prompt: t, attachments, instructions, projectFiles, mode, model };
+    const req: AiRequest = { prompt: t, attachments, instructions, projectFiles, mode, model: model ?? undefined };
     if (running) {
       if (queue.length >= MAX_QUEUE) { showToast(`대기는 ${MAX_QUEUE}개까지예요. 앞의 요청이 끝나면 다시 보내 주세요.`, "error"); return; }
       setQueue((q) => [...q, { id: ++idRef.current, req }]);
@@ -221,7 +225,7 @@ export function AiAssistantPanel({
     if (msgs.length === 0) return;
     const id = ++idRef.current;
     setConvs((all) => [{ id, title: "새 대화", msgs: [], at: Date.now() }, ...all]);
-    setModel(models.defaultModel);
+    setModel(panelDefault(conn));
     setCur(id);
     setMenu(null);
   };
@@ -347,8 +351,8 @@ export function AiAssistantPanel({
               <Plus size={17} color="#334155" />
             </button></IconTooltip>
             {/* 실행 방식(자동 / 계획 먼저) 칩은 뺐다(2026-11-19 사용자 "원래 없던 기능"): 보내면 늘 바로 작업한다 */}
-            <IconTooltip label={`AI 모델: ${modelLabel(model)}`} side="top"><button type="button" aria-label={`AI 모델 ${modelLabel(model)}`} aria-expanded={menu === "model"} onClick={() => setMenu(menu === "model" ? null : "model")} className="flex items-center gap-1 rounded-full px-2 h-8 min-w-0 hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ fontSize: editorType.label, color: isOwnKey(model) ? "#047857" : "#334155", fontWeight: 600 }}>
-              <Sparkles size={12} className="shrink-0" /><span className="truncate" style={{ maxWidth: 78 }}>{modelLabel(model, true)}</span><ChevronDown size={11} color="#94a3b8" className="shrink-0" />
+            <IconTooltip label={model ? `AI 모델: ${panelModelLabel(model)}` : "연결된 AI가 없어요"} side="top"><button type="button" aria-label={model ? `AI 모델 ${panelModelLabel(model)}` : "AI 연결 안 됨"} aria-expanded={menu === "model"} onClick={() => setMenu(menu === "model" ? null : "model")} className="flex items-center gap-1 rounded-full px-2 h-8 min-w-0 hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ fontSize: editorType.label, color: model ? "#334155" : "#b45309", fontWeight: 600 }}>
+              <Sparkles size={12} className="shrink-0" /><span className="truncate" style={{ maxWidth: 88 }}>{model ? panelModelLabel(model, true) : "AI 연결 안 됨"}</span><ChevronDown size={11} color="#94a3b8" className="shrink-0" />
             </button></IconTooltip>
             {running && !input.trim() ? (
               <IconTooltip label="작업 중지 (그린 데까지는 남아요)" side="top"><button type="button" aria-label="작업 중지" onClick={() => { cancelRef.current = true; }} className="ml-auto size-8 rounded-full flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#4f7bff]" style={{ background: color.brand }}>
@@ -385,34 +389,36 @@ export function AiAssistantPanel({
               </div>
             )}
             {menu === "model" && (
-              <div className="absolute left-0 right-0 bottom-10 z-30 bg-white rounded-xl py-1 max-h-[320px] overflow-y-auto ui-scroll" style={menuStyle} role="menu" aria-label="AI 모델">
-                <p style={{ fontSize: editorType.caption, fontWeight: 700, color: "#94a3b8", padding: "8px 12px 2px" }}>딸깍 AI</p>
-                {TIERS.map((t) => {
-                  const id = `ddalkkak:${t.id}`;
-                  return (
-                    <button key={id} type="button" role="menuitemradio" aria-checked={model === id} className={menuItem} onClick={() => { setModel(id); setMenu(null); }}>
-                      <span className="flex-1 min-w-0"><span className="block" style={{ fontSize: editorType.body, fontWeight: 600, color: "#111827" }}>{t.label} <span style={{ fontWeight: 500, fontSize: editorType.caption, color: "#94a3b8" }}>{t.note}</span></span><span className="block" style={{ fontSize: editorType.caption, color: "#64748b", wordBreak: "keep-all" }}>{t.desc}</span></span>
-                      {model === id && <Check size={14} color={color.brand} className="shrink-0" />}
-                    </button>
-                  );
-                })}
-                {ownModels(models).length > 0 && (
-                  <>
-                    <div className="h-px my-1" style={{ background: "#f1f5f9" }} />
-                    <p style={{ fontSize: editorType.caption, fontWeight: 700, color: "#94a3b8", padding: "4px 12px 2px" }}>내 AI · 크레딧 안 씀</p>
-                    {ownModels(models).map((o) => (
-                      <button key={o.id} type="button" role="menuitemradio" aria-checked={model === o.id} className={menuItem} onClick={() => { setModel(o.id); setMenu(null); }}>
-                        <span className="flex-1 min-w-0"><span className="block truncate" style={{ fontSize: editorType.body, fontWeight: 600, color: "#111827" }}>{o.label}</span><span className="block" style={{ fontSize: editorType.caption, color: "#64748b" }}>{o.provider} · 내 키</span></span>
-                        {model === o.id && <Check size={14} color={color.brand} className="shrink-0" />}
-                      </button>
-                    ))}
-                  </>
+              <div className="absolute left-0 right-0 bottom-10 z-30 bg-white rounded-xl py-1 max-h-[340px] overflow-y-auto ui-scroll" style={menuStyle} role="menu" aria-label="AI 모델">
+                {/* 2026-11-27: 설정 › AI 연결과 같은 목록. 연결된 AI의 모델만, 이전 세대 모델은 설정에서만 */}
+                {(["codex", "claude"] as AgentId[]).filter((a) => conn.connected[a]).map((a, gi) => (
+                  <div key={a}>
+                    {gi > 0 && <div className="h-px my-1" style={{ background: "#f1f5f9" }} />}
+                    <p style={{ fontSize: editorType.caption, fontWeight: 700, color: "#64748b", padding: "8px 12px 2px" }}>{AGENT_NAME[a]}</p>
+                    {(a === "codex" ? CODEX_MODELS.filter((m) => !m.legacy) : CLAUDE_MODELS).map((m) => {
+                      const id = panelModelId(a, m.id);
+                      return (
+                        <button key={id} type="button" role="menuitemradio" aria-checked={model === id} className={menuItem} onClick={() => { setModel(id); setMenu(null); }}>
+                          <span className="flex-1 min-w-0">
+                            <span className="flex items-center gap-1.5" style={{ fontSize: editorType.body, fontWeight: 600, color: "#111827" }}>
+                              {m.label}{m.recommended && <span className="rounded-full px-1.5" style={{ fontSize: 10.5, fontWeight: 700, color: color.brand, background: color.surface.accent }}>추천</span>}
+                            </span>
+                            <span className="block" style={{ fontSize: editorType.caption, color: "#64748b", wordBreak: "keep-all" }}>{m.desc}</span>
+                          </span>
+                          {model === id && <Check size={14} color={color.brand} className="shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+                {!conn.connected.codex && !conn.connected.claude && (
+                  <p style={{ fontSize: editorType.caption, color: "#64748b", padding: "10px 12px", lineHeight: 1.5 }}>연결된 AI가 없어요. 설정에서 Codex나 Claude Code에 로그인해 주세요.</p>
                 )}
                 {onManageModels && (
                   <>
                     <div className="h-px my-1" style={{ background: "#f1f5f9" }} />
                     <button type="button" className={menuItem} onClick={() => { setMenu(null); onManageModels(); }}>
-                      <span className="flex-1" style={{ fontSize: editorType.label, fontWeight: 600, color: color.brand }}>{ownModels(models).length ? "AI 연결 관리" : "Claude, ChatGPT 연결하기"}</span><ChevronRight size={13} color={color.brand} />
+                      <span className="flex-1" style={{ fontSize: editorType.label, fontWeight: 600, color: color.brand }}>AI 연결 설정</span><ChevronRight size={13} color={color.brand} />
                     </button>
                   </>
                 )}
@@ -639,9 +645,7 @@ function AiTurn({ m, onRunPlan, onCancelPlan, onShow }: { m: AiMsg; isLatest: bo
       {(r.credit > 0 || m.req.model) && !r.clarify && (
         <div className="flex items-center gap-2" style={{ fontSize: editorType.caption, color: "#94a3b8" }}>
           {/* 무엇으로 만들었는지 남긴다(docs/ai-models.md "2-4") */}
-          {m.req.model && isOwnKey(m.req.model)
-            ? <span>{modelLabel(m.req.model)} · 내 키, 크레딧 안 씀</span>
-            : <span>{m.req.model ? `${modelLabel(m.req.model, true)} · ` : ""}{r.credit > 0 ? `크레딧 ${r.credit.toLocaleString()} 사용` : "크레딧 안 씀"}</span>}
+          <span>{isConnectionModel(m.req.model) ? `${panelModelLabel(m.req.model!)} · ` : ""}{r.credit > 0 ? `크레딧 ${r.credit.toLocaleString()} 사용` : "크레딧 안 씀"}</span>
         </div>
       )}
     </div>

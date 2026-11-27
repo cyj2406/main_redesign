@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowUp, AtSign, Check, Image as ImageIcon, MapPin, MoreHorizontal, RotateCcw, Smile, X } from "lucide-react";
+import { ArrowUp, AtSign, Check, ChevronDown, ChevronLeft, ChevronUp, Image as ImageIcon, MapPin, MoreHorizontal, RotateCcw, Smile, X } from "lucide-react";
 
 import { showToast } from "@/app/components/common/Toast";
 import { REACTIONS, relTime, type CommentMsg } from "@/app/components/editor-shell/comments";
@@ -369,8 +369,12 @@ export interface ThreadActions {
  * 스레드 팝오버 — 머리: 코멘트 #n · ⋯(읽지 않음으로 표시 · 링크 복사 · 스레드 삭제) · ✓ 해결 · ✕.
  * 머리 아래 붙은 곳("Page 1 · 배달앱 모바일 메인") — Figma에는 없는 맥락 표시. 답글 초안은 닫아도 남는다.
  */
-export function ThreadPopover({ x, y, bounds, thread, me, members, anchorLabel, draft, actions }: {
-  x: number; y: number; bounds: { w: number; h: number }; thread: Thread; me: CommentAuthor; members: Member[]; anchorLabel: string; draft: string; actions: ThreadActions;
+export function ThreadPopover({ x = 0, y = 0, bounds = { w: 0, h: 0 }, thread, me, members, anchorLabel, draft, actions, embedded, nav }: {
+  x?: number; y?: number; bounds?: { w: number; h: number }; thread: Thread; me: CommentAuthor; members: Member[]; anchorLabel: string; draft: string; actions: ThreadActions;
+  /** 오른쪽 코멘트 목록 안에 그린다(2026-11-27 사용자 "목록이 열려 있으면 답글은 사이드바에"). 위치 계산 없이 꽉 채우고, ✕ 대신 ‹ 목록으로 */
+  embedded?: boolean;
+  /** 목록 안에서 이전·다음 코멘트로 바로 넘어가기(embedded일 때). 끝이면 그쪽 버튼이 흐려진다 */
+  nav?: { onPrev?: () => void; onNext?: () => void };
 }) {
   const [menu, setMenu] = useState(false);
   const [zoom, setZoom] = useState<string | null>(null);
@@ -385,16 +389,28 @@ export function ThreadPopover({ x, y, bounds, thread, me, members, anchorLabel, 
   }, [actions, zoom]);
 
   return (
-    <div className="absolute flex flex-col" style={{ ...POP_STYLE, ...pos, maxHeight: 460 }} onPointerDown={(e) => e.stopPropagation()} role="dialog" aria-label={`코멘트 ${thread.number}번`}>
-      <div className="relative flex items-center gap-1" style={{ padding: "12px 8px 8px 16px" }}>
+    <div
+      className={embedded ? "flex flex-col h-full min-h-0" : "absolute flex flex-col"}
+      style={embedded ? f : { ...POP_STYLE, ...pos, maxHeight: 460 }}
+      onPointerDown={(e) => e.stopPropagation()} role={embedded ? "region" : "dialog"} aria-label={`코멘트 ${thread.number}번`}
+    >
+      <div className="relative flex items-center gap-1 shrink-0" style={embedded ? { height: 48, padding: "0 8px 0 6px" } : { padding: "12px 8px 8px 16px" }}>
+        {embedded && <IconTooltip label="목록으로 (Esc)"><button type="button" className={iconBtn} aria-label="코멘트 목록으로" onClick={actions.onClose}><ChevronLeft size={18} color="#475569" /></button></IconTooltip>}
         <span style={{ fontSize: editorType.large, fontWeight: 700, color: "#111827" }}>코멘트 <span style={{ color: "#94a3b8", fontWeight: 600 }}>#{thread.number}</span></span>
         {thread.resolved && <span style={{ fontSize: editorType.caption, fontWeight: 700, color: EDITOR_ACCENT, marginLeft: 4 }}>해결됨</span>}
         <div className="ml-auto flex items-center relative">
+          {nav && (
+            <>
+              <IconTooltip label="이전 코멘트"><button type="button" className={iconBtn} aria-label="이전 코멘트" disabled={!nav.onPrev} onClick={nav.onPrev}><ChevronUp size={16} color="#475569" /></button></IconTooltip>
+              <IconTooltip label="다음 코멘트"><button type="button" className={iconBtn} aria-label="다음 코멘트" disabled={!nav.onNext} onClick={nav.onNext}><ChevronDown size={16} color="#475569" /></button></IconTooltip>
+              <span aria-hidden className="w-px h-4 mx-1" style={{ background: "#e2e8f0" }} />
+            </>
+          )}
           <IconTooltip label="읽지 않음 · 링크 복사 · 삭제"><button type="button" className={iconBtn} aria-label="코멘트 메뉴" aria-expanded={menu} onClick={() => setMenu((v) => !v)} style={{ background: menu ? "#eef2ff" : undefined }}><MoreHorizontal size={16} color="#475569" /></button></IconTooltip>
           <IconTooltip label={thread.resolved ? "다시 열기" : "해결로 표시"}><button type="button" className={iconBtn} aria-label={thread.resolved ? "다시 열기" : "해결로 표시"} onClick={() => actions.onResolve(!thread.resolved)}>
             {thread.resolved ? <RotateCcw size={15} color="#475569" /> : <Check size={16} color={EDITOR_ACCENT} strokeWidth={2.4} />}
           </button></IconTooltip>
-          <IconTooltip label="닫기 (Esc)"><button type="button" className={iconBtn} aria-label="닫기" onClick={actions.onClose}><X size={16} color="#475569" /></button></IconTooltip>
+          {!embedded && <IconTooltip label="닫기 (Esc)"><button type="button" className={iconBtn} aria-label="닫기" onClick={actions.onClose}><X size={16} color="#475569" /></button></IconTooltip>}
           {menu && <DarkMenu onClose={() => setMenu(false)} items={[
             { label: "읽지 않음으로 표시", onClick: actions.onMarkUnread },
             { label: "링크 복사", onClick: actions.onCopyLink },
@@ -402,10 +418,10 @@ export function ThreadPopover({ x, y, bounds, thread, me, members, anchorLabel, 
           ]} />}
         </div>
       </div>
-      <p className="flex items-center gap-1 truncate" style={{ fontSize: editorType.caption, color: "#64748b", padding: "0 16px 8px", borderBottom: "1px solid #f1f5f9" }}>
+      <p className="flex items-center gap-1 truncate shrink-0" style={{ fontSize: editorType.caption, color: "#64748b", padding: embedded ? "0 16px 10px 42px" : "0 16px 8px", borderBottom: "1px solid #f1f5f9" }}>
         <MapPin size={11} className="shrink-0" />{anchorLabel}
       </p>
-      <div ref={listRef} className="overflow-y-auto ui-scroll" style={{ padding: "2px 0" }}>
+      <div ref={listRef} className={`overflow-y-auto ui-scroll${embedded ? " flex-1 min-h-0" : ""}`} style={{ padding: "2px 0" }}>
         {thread.messages.map((m, i) => (
           <MessageItem
             key={m.id} m={m} me={me} members={members} isFirst={i === 0}
@@ -416,7 +432,7 @@ export function ThreadPopover({ x, y, bounds, thread, me, members, anchorLabel, 
           />
         ))}
       </div>
-      <div style={{ borderTop: "1px solid #f1f5f9" }}>
+      <div className="shrink-0" style={{ borderTop: "1px solid #f1f5f9" }}>
         <Composer
           key={thread.id} placeholder="답글 달기" members={members} autoFocus={false} initial={draft} onDraft={actions.onDraft}
           onSubmit={actions.onReply} onCancel={actions.onClose}

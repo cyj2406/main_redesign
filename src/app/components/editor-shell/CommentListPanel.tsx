@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Check, CheckCheck, Eye, EyeOff, ListFilter, MessageCircle, Search } from "lucide-react";
 
 import { ProfileAvatar } from "@/app/components/mypage/ProfileAvatar";
@@ -13,8 +13,13 @@ import { IconTooltip } from "@/app/components/viewer/IconTooltip";
  * 검색 · 필터 메뉴(읽지 않음만 · 나를 멘션한 것 · 내가 참여한 것 · 해결된 것도 보기 — Figma 필터 아이콘) · 최신순 · 모두 읽음 · 캔버스 핀 숨기기.
  * 항목: 작성자 · #번호 · 시간 · 첫 댓글 · 위치(페이지 · 프레임) · 답글 수 · "@나" · "작성 중"(보내지 않은 답글).
  */
+/** 스레드 보기 머리의 이전·다음 코멘트(목록 순서). 끝이면 없음 */
+export interface ThreadNav { onPrev?: () => void; onNext?: () => void }
+
+const msgPreview = (m: { text: string; images?: string[] }) => m.text || (m.images?.length ? `이미지 ${m.images.length}장` : "");
+
 export function CommentListPanel<T extends CommentThreadBase>({
-  threads, me, location, openThreadId, hidden, onToggleHidden, onOpen, onMarkAllRead, emptyHint, onClose, closeShortcut,
+  threads, me, location, openThreadId, hidden, onToggleHidden, onOpen, onMarkAllRead, emptyHint, onClose, closeShortcut, renderThread, surface = "캔버스", hiddenNote,
 }: {
   threads: T[];
   me: CommentAuthor;
@@ -28,6 +33,12 @@ export function CommentListPanel<T extends CommentThreadBase>({
   emptyHint: string;
   onClose?: () => void;
   closeShortcut?: string;
+  /** 있으면 열린 스레드(답글까지)를 목록 자리에 그린다. 없으면 캔버스 위 팝오버로 연다(UI 디자인) */
+  renderThread?: (t: T, nav: ThreadNav) => ReactNode;
+  /** 눈 버튼 툴팁의 자리 이름: "캔버스", "문서", "시트" … */
+  surface?: string;
+  /** 숨김 중 안내 문구 */
+  hiddenNote?: string;
 }) {
   const [filters, setFilters] = useState({ unread: false, mentions: false, mine: false, resolved: false });
   const [filterOpen, setFilterOpen] = useState(false);
@@ -57,6 +68,41 @@ export function CommentListPanel<T extends CommentThreadBase>({
   ] as const;
 
   const iconBtn = "size-8 flex items-center justify-center rounded-md hover:bg-black/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff] disabled:opacity-40";
+  const openThread = renderThread && openThreadId ? threads.find((t) => t.id === openThreadId) : undefined;
+
+  // 이전·다음 순서는 스레드를 연 순간의 목록으로 고정한다. 답글을 달면 최신순이라 맨 위로 올라가 "다음"이 처음으로 되돌아가기 때문
+  const orderRef = useRef<string[] | null>(null);
+  if (!openThread) orderRef.current = null;
+  else if (!orderRef.current?.includes(openThread.id)) orderRef.current = list.map((t) => t.id);
+
+  // 목록으로 돌아오면 보던 스크롤 자리를 되살리고, 방금 본 항목을 잠깐 강조한다
+  const listRef = useRef<HTMLDivElement>(null);
+  const scrollTop = useRef(0);
+  const lastOpen = useRef<string | null>(null);
+  const [flashId, setFlashId] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    if (openThread) { lastOpen.current = openThread.id; return; }
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTop = scrollTop.current;
+    const back = lastOpen.current;
+    lastOpen.current = null;
+    if (!back) return;
+    el.querySelector<HTMLElement>(`[data-thread-id="${back}"]`)?.scrollIntoView({ block: "nearest" });
+    setFlashId(back);
+    const t = window.setTimeout(() => setFlashId(null), 1600);
+    return () => window.clearTimeout(t);
+  }, [openThread?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (openThread && renderThread) {
+    const order = (orderRef.current ?? []).map((id) => threads.find((t) => t.id === id)).filter((t): t is T => !!t);
+    const i = order.findIndex((t) => t.id === openThread.id);
+    const nav: ThreadNav = {
+      onPrev: i > 0 ? () => onOpen(order[i - 1]) : undefined,
+      onNext: i >= 0 && i < order.length - 1 ? () => onOpen(order[i + 1]) : undefined,
+    };
+    return <div className="flex flex-col h-full min-h-0">{renderThread(openThread, nav)}</div>;
+  }
   return (
     <div className="flex flex-col h-full" style={f}>
       <div className="flex items-center gap-2 shrink-0" style={{ height: 48, padding: onClose ? "0 8px 0 6px" : "0 8px 0 14px", borderBottom: "1px solid #eef0f3" }}>
@@ -68,14 +114,14 @@ export function CommentListPanel<T extends CommentThreadBase>({
             <CheckCheck size={15} color="#475569" />
           </button></IconTooltip>
           {onToggleHidden && (
-            <IconTooltip label={`${hidden ? "캔버스에 코멘트 보이기" : "캔버스에서 코멘트 숨기기"}`}><button type="button" className={iconBtn} aria-pressed={hidden} aria-label={hidden ? "캔버스에 코멘트 보이기" : "캔버스에서 코멘트 숨기기"} onClick={onToggleHidden}>
+            <IconTooltip label={hidden ? `${surface}에 코멘트 보이기` : `${surface}에서 코멘트 숨기기`}><button type="button" className={iconBtn} aria-pressed={hidden} aria-label={hidden ? `${surface}에 코멘트 보이기` : `${surface}에서 코멘트 숨기기`} onClick={onToggleHidden}>
               {hidden ? <EyeOff size={15} color="#475569" /> : <Eye size={15} color="#475569" />}
             </button></IconTooltip>
           )}
         </div>
       </div>
       {hidden && (
-        <p className="shrink-0" style={{ fontSize: editorType.caption, color: "#92400e", background: "#fffbeb", padding: "8px 16px" }}>캔버스에서 숨김 중. 코멘트 모드에서는 보여요</p>
+        <p className="shrink-0" style={{ fontSize: editorType.caption, color: "#92400e", background: "#fffbeb", padding: "8px 16px" }}>{hiddenNote ?? `${surface}에서 숨김 중. 코멘트 모드에서는 보여요`}</p>
       )}
       <div className="shrink-0 flex items-center gap-2" style={{ padding: "12px 12px 12px" }}>
         <label className="field-pill flex-1 min-w-0 flex items-center gap-2 rounded-lg px-3 h-8 border border-transparent" style={{ background: "#f5f5f5" }}>
@@ -106,7 +152,7 @@ export function CommentListPanel<T extends CommentThreadBase>({
           )}
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto ui-scroll" style={{ borderTop: "1px solid #f1f5f9" }}>
+      <div ref={listRef} onScroll={(e) => { scrollTop.current = e.currentTarget.scrollTop; }} className="flex-1 overflow-y-auto ui-scroll" style={{ borderTop: "1px solid #f1f5f9" }}>
         {list.length === 0 ? (
           <p style={{ fontSize: editorType.body, lineHeight: "20px", color: "#64748b", padding: "28px 20px", textAlign: "center", wordBreak: "keep-all" }}>
             {query || activeFilters ? "조건에 맞는 코멘트가 없어요." : emptyHint}
@@ -117,9 +163,9 @@ export function CommentListPanel<T extends CommentThreadBase>({
           const unread = isUnread(t, me);
           return (
             <button
-              key={t.id} type="button" onClick={() => onOpen(t)}
-              className="relative w-full text-left flex gap-3 outline-none hover:bg-[#f8fafc] focus-visible:bg-[#f8fafc]"
-              style={{ padding: "12px 16px", borderBottom: "1px solid #f1f5f9", background: t.id === openThreadId ? "#f0fbf6" : undefined }}
+              key={t.id} type="button" onClick={() => onOpen(t)} data-thread-id={t.id}
+              className="relative w-full text-left flex gap-3 outline-none hover:bg-[#f8fafc] focus-visible:bg-[#f8fafc] transition-colors duration-500"
+              style={{ padding: "12px 16px", borderBottom: "1px solid #f1f5f9", background: t.id === flashId ? color.surface.accent : t.id === openThreadId ? "#f0fbf6" : undefined }}
             >
               <ProfileAvatar profile={first.author} size={24} />
               <div className="min-w-0 flex-1">
@@ -127,10 +173,18 @@ export function CommentListPanel<T extends CommentThreadBase>({
                   <span style={{ fontSize: editorType.body, fontWeight: unread ? 800 : 600, color: "#111827" }}>{first.author.name}</span>
                   <span style={{ fontSize: editorType.caption, color: "#64748b" }}>#{t.number} · {relTime(last.createdAt)}</span>
                 </div>
-                <p className="line-clamp-2" style={{ fontSize: editorType.body, lineHeight: "20px", color: "#1f2937", fontWeight: unread ? 600 : 400, marginTop: 2, wordBreak: "break-word" }}>{first.text || (first.images?.length ? `이미지 ${first.images.length}장` : "")}</p>
+                <p className="line-clamp-2" style={{ fontSize: editorType.body, lineHeight: "20px", color: "#1f2937", fontWeight: unread ? 600 : 400, marginTop: 2, wordBreak: "break-word" }}>{msgPreview(first)}</p>
+                {/* 마지막 답글 한 줄(2026-11-27): 답 하나 확인하려고 스레드에 들어갔다 나오지 않게 */}
+                {t.messages.length > 1 && (
+                  <p className="flex items-center gap-1.5 min-w-0" style={{ marginTop: 6 }}>
+                    <ProfileAvatar profile={last.author} size={16} />
+                    <span className="truncate" style={{ fontSize: editorType.label, color: unread ? "#111827" : "#475569", fontWeight: unread ? 600 : 400 }}>
+                      <span style={{ fontWeight: 600 }}>{last.author.name}</span> {msgPreview(last)}
+                    </span>
+                  </p>
+                )}
                 <p className="truncate" style={{ fontSize: editorType.caption, color: "#64748b", marginTop: 4 }}>
                   {location(t)}{t.messages.length > 1 ? ` · 답글 ${t.messages.length - 1}개` : ""}
-                  {unread && t.messages.length > 1 ? ` · 새 답글: ${last.author.name}` : ""}
                 </p>
                 {(mentionsMe(t, me) || t.myDraft || t.resolved) && (
                   <span className="flex gap-1 mt-2">

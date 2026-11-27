@@ -13,7 +13,7 @@ const PAD = 8;
 const TIP_W = 320;
 const DIM = "rgba(15, 23, 42, 0.58)";
 
-export function Coachmark({ target, title, body, step, total, placement = "right", onSkip, actions, pulse }: {
+export function Coachmark({ target, title, body, step, total, placement = "right", onSkip, actions, pulse, tip }: {
   /** data-onboarding 선택자 */
   target: string;
   title: string;
@@ -27,6 +27,9 @@ export function Coachmark({ target, title, body, step, total, placement = "right
   actions: ReactNode;
   /** 밝힌 영역 안에서 반짝일 요소(누를 곳) 선택자 */
   pulse?: string;
+  /** 마무리 말풍선(튜토리얼 끝): 화면을 어둡게 하거나 막지 않고 대상에 파란 테두리만. 머리줄은 단계 점을 다 채우고 "다 했어요".
+   *  건너뛰기 버튼은 없고 onSkip은 Esc로만 쓴다 */
+  tip?: boolean;
 }) {
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [tipH, setTipH] = useState(170);
@@ -83,24 +86,29 @@ export function Coachmark({ target, title, body, step, total, placement = "right
 
   return createPortal(
     <div className="fixed inset-0 z-[120] pointer-events-none" style={f}>
+      {tip ? (
+        // 마무리 말풍선: 어둡게 하지 않는다. 대상 둘레에 파란 테두리만
+        <div aria-hidden className="fixed" style={{ left: spot.left + 4, top: spot.top + 4, width: spot.width - 8, height: spot.height - 8, borderRadius: radius.card, outline: `2px solid ${color.brand}`, outlineOffset: 0 }} />
+      ) : <>
       {/* 어두운 바깥: 구멍 둘레 네 조각만 막는다. 구멍(대상)은 그대로 눌린다 */}
       <div className={`${block} pointer-events-auto`} style={{ left: 0, top: 0, width: vw, height: spot.top }} />
       <div className={`${block} pointer-events-auto`} style={{ left: 0, top: spot.bottom, width: vw, height: Math.max(vh - spot.bottom, 0) }} />
       <div className={`${block} pointer-events-auto`} style={{ left: 0, top: spot.top, width: spot.left, height: spot.height }} />
       <div className={`${block} pointer-events-auto`} style={{ left: spot.right, top: spot.top, width: Math.max(vw - spot.right, 0), height: spot.height }} />
       <div aria-hidden className="fixed" style={{ left: spot.left, top: spot.top, width: spot.width, height: spot.height, borderRadius: radius.card, boxShadow: `0 0 0 9999px ${DIM}`, outline: "2px solid rgba(255,255,255,0.9)" }} />
+      </>}
 
       <div ref={tipRef} role="dialog" aria-label={title} className="fixed pointer-events-auto"
         style={{ top: pos.top, left: pos.left, width, background: color.surface.default, borderRadius: radius.card, boxShadow: shadow.modal, padding: "18px 20px 20px",
           animation: prefersReducedMotion() ? undefined : "starter-in 160ms ease" }}>
         <div className="flex items-center justify-between" style={{ height: 24 }}>
-          <span className="flex items-center gap-2" aria-label={`${total}단계 중 ${step}단계`}>
+          <span className="flex items-center gap-2" aria-label={tip ? `${total}단계를 모두 했어요` : `${total}단계 중 ${step}단계`}>
             <span aria-hidden className="flex gap-1">
-              {Array.from({ length: total }, (_, i) => <span key={i} style={{ width: i === step - 1 ? 14 : 6, height: 6, borderRadius: 3, background: i < step ? color.brand : color.border.default }} />)}
+              {Array.from({ length: total }, (_, i) => <span key={i} style={{ width: !tip && i === step - 1 ? 14 : 6, height: 6, borderRadius: 3, background: tip || i < step ? color.brand : color.border.default }} />)}
             </span>
-            <span aria-hidden style={{ fontSize: 12, fontWeight: 600, color: color.text.secondary, fontVariantNumeric: "tabular-nums" }}>{step}/{total}</span>
+            <span aria-hidden style={{ fontSize: 12, fontWeight: 600, color: tip ? color.brand : color.text.secondary, fontVariantNumeric: "tabular-nums" }}>{tip ? "다 했어요" : `${step}/${total}`}</span>
           </span>
-          {onSkip && (
+          {onSkip && !tip && (
             <button type="button" onClick={onSkip} className="rounded-md px-1.5 py-0.5 outline-none hover:bg-[#f1f5f9] focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ fontSize: 12.5, fontWeight: 600, color: color.text.secondary }}>건너뛰기</button>
           )}
         </div>

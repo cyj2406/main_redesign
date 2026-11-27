@@ -60,6 +60,8 @@ interface Props {
   onMoveThread: (threadId: string, frameId: string | null, x: number, y: number) => void;
   /** 캔버스에서 핀 숨김(⇧C). 코멘트 모드에서는 무시하고 보인다 */
   pinsHidden: boolean;
+  /** 오른쪽 코멘트 목록이 열려 있어 스레드를 거기서 보여 준다. 이때는 캔버스 팝오버를 띄우지 않는다 */
+  threadInPanel?: boolean;
   /** 딸깍 AI 작업 중 — 방금 그린 요소(커서 위치)와 만들고 있는 프레임 */
   aiCursorNodeId: string | null;
   aiBuildingId: string | null;
@@ -367,9 +369,10 @@ export function Canvas(p: Props) {
     if (t.frameId && doc.nodes[t.frameId]) { const a = absPos(doc, t.frameId); return toScreen(a.x + t.x, a.y + t.y); }
     return toScreen(t.x, t.y);
   };
-  const showPins = !p.pinsHidden || tool === "comment";
-  const visibleThreads = p.threads.filter((t) => t.pageId === page.id && (t.id === p.openThreadId || (showPins && !t.resolved)));
-  const openThread = p.threads.find((t) => t.id === p.openThreadId) ?? null;
+  // 숨김(눈 끔)이면 코멘트 모드여도 핀과 팝오버를 모두 감춘다(문서 편집기와 같은 규칙, 2026-11-27)
+  const showPins = !p.pinsHidden;
+  const visibleThreads = p.threads.filter((t) => t.pageId === page.id && showPins && (t.id === p.openThreadId || !t.resolved));
+  const openThread = (showPins && !p.threadInPanel && p.threads.find((t) => t.id === p.openThreadId)) || null;
 
   // ── 핀 옮기기 ── 3px 넘게 움직이면 옮기기, 아니면 열기. 남의 핀은 잡기만 되고 안내.
   const [pinDrag, setPinDrag] = useState<{ id: string; x: number; y: number } | null>(null);

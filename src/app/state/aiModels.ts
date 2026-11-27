@@ -55,6 +55,8 @@ export function modelLabel(id: ModelId, short = false): string {
 /** 기준 크레딧 → 이 모델로 쓸 크레딧. 내 키는 0 */
 export function creditFor(id: ModelId | undefined, base: number): number {
   if (!id) return base;
+  // 2026-11-27: 패널 모델이 설정 › AI 연결(Codex · Claude Code) 기준으로 바뀌었다. 모델별 배율은 아직 없어 기준 그대로
+  if (id.startsWith("codex:") || id.startsWith("claude:")) return base;
   if (isOwnKey(id)) return 0;
   const t = TIERS.find((x) => `ddalkkak:${x.id}` === id) ?? TIERS[1];
   return Math.max(1, Math.round(base * t.multiplier));

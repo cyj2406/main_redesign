@@ -1,17 +1,9 @@
 import { CreditBalanceCard } from "@/app/components/pricing/CreditBalanceCard";
 import { CreditHistorySection } from "@/app/components/pricing/CreditHistorySection";
-import { color, f } from "@/app/styleTokens";
+import { SettingsSectionHead as SectionHead } from "./SettingsKit";
 import { useCreditBalance } from "@/app/state/creditBalance";
 import { useSubscription } from "@/app/state/subscription";
 
-function SectionHead({ title, desc }: { title: string; desc?: string }) {
-  return (
-    <div>
-      <p style={{ ...f, fontWeight: 700, fontSize: 16, color: color.text.primary, letterSpacing: "-0.4px" }}>{title}</p>
-      {desc && <p style={{ ...f, fontWeight: 400, fontSize: 13, color: color.text.muted, letterSpacing: "-0.2px", lineHeight: 1.6, marginTop: 6 }}>{desc}</p>}
-    </div>
-  );
-}
 
 /**
  * 설정 > 크레딧·사용 내역 — 잔액과 크레딧 내역만 다룬다. 현재 플랜 카드·구독 상태·

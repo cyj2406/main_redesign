@@ -460,6 +460,7 @@ ESC 닫기)을 뽑아냈다. `PurchaseConfirmDialog`와 `CancelSubscriptionDialo
 - `src/app/components/uidesign/*`(딸깍 UI 디자인 에디터, 2026-11-13 — 아래 해당 절. 에디터 전용 스타일이라 서비스 기준 아님)
 - `src/app/components/editor-shell/*`(에디터 공통 셸 — 상단 바·오른쪽 도크·공유·AI·코멘트 목록, 2026-11-13)
 - AI 모델 선택(2026-11-19, docs/ai-models.md): `src/app/state/aiModels.ts` · 설정 "AI 모델" 탭(`components/settings/AiModelsSettings.tsx`) · `AiAssistantPanel` 입력창 모델 칩. 내 키 표시는 초록(#047857/#ecfdf5) 배지 "내 키".
+- 설정 화면(2026-11-27, 아래 "설정 화면" 절): `src/app/components/settings/{SettingsKit,CompanySettings,OrgSettings,AiConnectionSettings}.tsx` · `src/app/state/aiConnection.ts`. 설정 탭 구성이 딸깍 데스크톱과 같아졌다(화면 설정 · 알림 · 메모리 · 회사 정보 · 조직·사내 공유 · AI 연결 · 크레딧 · 구독 및 결제). "AI 모델" 탭은 "AI 연결"로 바뀌어 화면에서 빠졌다(`AiModelsSettings.tsx` 파일은 남아 있음).
 - `src/app/components/doceditor/*`(한글·워드·엑셀·PPT·PDF·영상·이미지 편집기 셸 · 템플릿 패널 · 문서 코멘트 레이어, 2026-11-19, docs/doc-editor.md. 셸은 서비스 토큰 `color.brand`·`f`·`Button`·`Modal`을 쓴다)
 - 서비스 전역의 브랜드 블루 색상값(아래 "1) 브랜드 블루" 참고) — 홈/검색/템플릿 화면의
   **레이아웃·문구는 건드리지 않고 색상값만** `#2563eb`→`color.brand`, `#1d4ed8`→`color.brandHover`,
@@ -510,6 +511,45 @@ ESC 닫기)을 뽑아냈다. `PurchaseConfirmDialog`와 `CancelSubscriptionDialo
 - **안에 든 입력칸은 `field-inline`, 감싸는 둥근 칸은 `field-pill`**: 전역 포커스 규칙이 input · textarea뿐 아니라 **select에도** 각진 파란 상자를 그려서(공유 창 "편집 가능") select도 `field-inline`을 받게 theme.css를 고쳤다. 감싼 칸 안의 select는 `appearance-none` + lucide `ChevronDown`, 앞에 세로 구분선.
 - 공유 창: 입력 · 권한 · [초대] 높이를 공통 40px로, 글자 14px. UI 디자인 속성 패널 굵기 select도 기본 화살표 대신 lucide `ChevronDown`.
 - 오류 글자는 `#dc2626`(흰 바탕 4.8:1). `#ef4444`는 테두리에만(글자로 쓰면 대비 부족).
+
+## 편집기 상단 저장 · 다운로드 · 툴팁 (2026-11-27) — docs/editor-common-header.md "30"
+
+- 결과물 묶음 `[공유] [⬇ 다운로드]`(💾는 파일 이름 옆). 오른쪽 끝 채운 버튼은 하나: 문서 계열은 다운로드, UI 디자인 · 보드는 공유(`EditorHeader` `primary`, "33"). 다운로드 창 맨 아래 "파일 대신 공유하면…[공유하기 ›]" 한 줄로 협업을 알린다(`ExportPopover` `onShare`). 저장은 모든 편집기 상단 파일 이름 바로 옆에("41"), 💾 디스크 아이콘 버튼(누르면 지금 상태를 버전 기록에 "남긴 버전"으로, editor-common-header "38")(저장 중 돌아가는 원, 실패 ☁!), ⌘S. 다운로드는 테두리 버튼 + 이름, 형식은 `ExportPopover`.
+- 딸깍 AI는 단독 버튼(옅은 파랑 바탕 + 이름, 열리면 파란 테두리). 버전 기록 · 코멘트 · 템플릿은 테두리 없는 아이콘 + 이름, 열리면 옅은 회색 바탕(#f1f5f9, "43"). 좁으면 아이콘만. 저장은 테두리 없는 아이콘(모든 편집기, "39"). 파랑은 딸깍 AI와 다운로드에만("37"). 테두리 상자는 공유 · 다운로드만. 구분선(1px #e2e8f0, 높이 20px)은 양쪽에 하나씩: 왼쪽 [파일 이름 · 저장] | [템플릿 등 도구], 오른쪽 [패널 버튼] | [공유 · 다운로드]("44"). 패널 닫기는 캔버스 쪽 끝 » / «(editor-common-header "35", "36").
+- 아이콘 버튼 툴팁은 **이름 + 단축키만**("코멘트 (⌘⌥M)"). 쓰는 법 설명을 툴팁에 넣지 않는다(Canva · 미리캔버스 방식).
+
+## 코멘트 목록과 스레드 (2026-11-27) — docs/editor-common-header.md "31"
+
+- 오른쪽 코멘트 목록이 열려 있으면 스레드(답글 포함)는 **목록 자리에서** 연다(`CommentListPanel` `renderThread` + `ThreadPopover embedded`). 목록이 닫혀 있을 때만 문서 위 팝오버.
+- 목록 항목에 마지막 답글 한 줄, 스레드 머리에 이전·다음(˄ ˅), 목록으로 돌아오면 스크롤 유지 + 방금 본 항목 강조("34").
+- 숨김(눈 끔)은 핀과 팝오버를 함께 감춘다. 숨김 안내와 눈 버튼 툴팁은 자리 이름(문서 · 시트 · 캔버스 …)을 쓴다. 적용: 문서 편집기들과 UI 디자인 편집기.
+
+## 설정 화면 (2026-11-27) — `src/app/components/settings/SettingsKit.tsx`
+
+딸깍 데스크톱 설정의 내용(회사 정보 · 조직·사내 공유 · AI 연결)을 그대로 옮기면서 읽기 쉽게 다시 짰다. 새 설정 탭은 아래 조각만 쓴다.
+
+| 조각 | 쓰임 |
+|---|---|
+| `SettingsSectionHead` | 섹션 제목 16/700 + 설명 13.5/400 `color.text.secondary`. 오른쪽 `action` 자리(예: AI 연결 "다시 확인") |
+| `SettingsCard` | 흰 카드, `color.border.default` 테두리, `radius.card`, `shadow.card` |
+| `SettingsRow` | 카드 안 한 줄: 제목 14/600 · 설명 13 / 오른쪽 컨트롤 |
+| `SettingsToggle` | 알림 탭과 같은 검정 토글 |
+| `SettingsRadioList` | 선택지를 테두리 하나로 묶고 줄 사이 구분선. 고른 줄은 브랜드 점 + `surface.subtle` 바탕. 추천은 `Badge tone="brand"` |
+| `SettingsField` | 라벨 + 44px 입력칸(`FIELD_SURFACE`, `.ui-field`). `changed`면 라벨 옆 파란 점과 옅은 파란 테두리 |
+| `StatusPill` | 연결됨(초록 #047857/#ecfdf5, "내 키" 배지와 같은 쌍) · 연결 안 됨(중립) |
+
+가독성 규칙:
+- **설명 글자는 `color.text.secondary`**. 예전 `muted`(#9ca3af)는 흰 바탕 대비 2.5:1이라 읽기 어려웠다. 기존 탭(화면 설정 · 알림 · 메모리 · 크레딧)의 섹션 설명도 같은 조각으로 바꿨다.
+- 선택지마다 굵은 검정 테두리 카드를 쌓지 않는다(데스크톱 원본). 한 묶음 카드 + 구분선.
+- 긴 기능 나열("채팅·문서 작업 · 편집기 옆 딸깍 AI · …")은 문장 대신 "할 수 있는 일" 칩으로.
+- 칸이 많은 폼은 소제목으로 묶는다(회사 정보 기본 정보: 회사 · 등록 정보 · 주소 · 연락).
+- 저장 버튼은 바뀐 게 있을 때만 아래 검정 막대로("바뀐 항목 N개" + 항목 이름, 되돌리기 · 저장). 저장하면 버전 탭에 쌓이고, 기록 탭에 항목별로 남는다.
+- 삭제는 아이콘 버튼(툴팁) + 되돌리기 토스트. 화면에 빨간 "삭제" 글자를 따로 띄우지 않는다.
+- 형식 예시 placeholder에도 대시를 쓰지 않는다: "숫자 10자리", "받은 초대 코드 15자리". 날짜는 `type="date"`.
+- 모델 이름은 대시 없이 띄어 쓴다(GPT 6.1 Sol). 파일 이름(`chat-failures.jsonl`)은 예외.
+- 1200px 아래 탭: 회색 상자 속 아이콘 탭은 8개가 되자 잘리고 고른 탭이 화면 밖에 있어 어색했다 → 공통 밑줄 탭(`ScrollableChips` underline, 요금제 페이지와 같은 내비게이션 탭). 글자만, 고른 탭은 가운데로 스크롤, 아래 1px 구분선으로 내용과 나눈다. 1200px 이상은 왼쪽 세로 메뉴 그대로.
+- **AI 연결은 처음 쓰는 사람 기준**(2026-11-27 2차, 사용자 "잘 못하는 사람도 쉽게, 필요 없는 정보는 생략"): 위에서부터 ① 섹션 머리(제목 · 설명에 상태 한 줄 "지금 채팅은 Codex CLI가 맡고 있어요" · 오른쪽 "다시 확인" secondary 버튼). 처음엔 초록·주황으로 채운 상태 카드였는데 "AI 디자인 같다"는 피드백으로 뺐다: 설정 화면은 색 채운 카드로 꾸미지 않고, 색은 작은 상태 배지(StatusPill)에만 쓴다 ② 이 컴퓨터의 AI 두 줄(이름 · 한 줄 설명 · 연결됨, 다른 계정으로 로그인과 로그아웃은 ⋯ 메뉴, 로그아웃은 되돌리기 토스트) ③ "채팅과 문서 작업은 누가 할까요?"(둘 다 연결됐을 때만) ④ 고급 설정(기본 닫힘: 모델, 앱 버전, 로그). "할 수 있는 일" 칩, 로그 경로 글자, 긴 이어받기 설명은 뺐다(경로는 버튼 툴팁).
+- **딸깍 AI 패널 모델 버튼도 AI 연결 기준**(2026-11-27): 메뉴는 연결된 AI별 묶음(Codex CLI · Claude Code)에 설정과 같은 모델 목록(이전 세대 제외), 맨 아래 "AI 연결 설정 ›". 새 대화는 채팅을 맡은 AI와 그 모델로 시작하고, 대화에서 바꾼 건 그 대화에만 쓴다. 고른 AI가 끊기면 기본값으로 돌아가고, 둘 다 끊기면 버튼이 "AI 연결 안 됨"(주황 글자). 결과 아래 줄은 "Claude Sonnet · 크레딧 N 사용". 크레딧은 모델별 배율 없이 기준값 그대로(`creditFor`). 예전 딸깍 AI 높음·보통·낮음과 내 키(`state/aiModels.ts`)는 화면에서 더 쓰지 않는다.
 
 ## 화면 문구 규칙 (2026-11-20, 토스 문구 방식) — `src/app/copy.ts`
 
